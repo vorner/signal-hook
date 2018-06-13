@@ -86,12 +86,13 @@ impl GlobalData {
         let signals = AllSignals::clone(&self.all_signals.load());
         (signals, lock)
     }
-    fn store(&self, signals: AllSignals, _lock: MutexGuard<u64>) {
+    fn store(&self, signals: AllSignals, lock: MutexGuard<u64>) {
         let mut previous = self.all_signals.swap(Arc::new(signals));
         while let Err(failed_unwrap) = Arc::try_unwrap(previous) {
             previous = failed_unwrap;
             thread::yield_now();
         }
+        drop(lock);
     }
 }
 
