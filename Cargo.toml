@@ -1,0 +1,8 @@
+[package]
+name = "signal-hook"
+version = "0.1.0"
+authors = ["Michal 'vorner' Vaner <vorner@vorner.cz>"]
+
+[dependencies]
+arc-swap = "~0.1"
+libc = "~0.2"
