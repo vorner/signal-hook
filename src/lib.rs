@@ -23,10 +23,12 @@ pub struct SigId {
     action: ActionId,
 }
 
+pub type Action = Fn() + Send + Sync;
+
 #[derive(Clone)]
 struct Slot {
     prev: sigaction,
-    actions: BTreeMap<ActionId, Arc<Fn()>>,
+    actions: BTreeMap<ActionId, Arc<Action>>,
 }
 
 impl Slot {
@@ -158,7 +160,7 @@ fn without_signal<F: FnOnce() -> Result<(), Error>>(signal: c_int, f: F) -> Resu
     result.and(restored)
 }
 
-pub unsafe fn register_action(signal: c_int, action: Box<Fn()>) -> Result<SigId, Error> {
+pub unsafe fn register_action(signal: c_int, action: Box<Action>) -> Result<SigId, Error> {
     let globals = GlobalData::ensure();
     let (mut signals, mut lock) = globals.load();
     let id = ActionId(*lock);
