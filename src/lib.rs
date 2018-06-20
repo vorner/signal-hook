@@ -9,7 +9,6 @@ use std::panic::{self, AssertUnwindSafe};
 use std::process;
 use std::ptr;
 use std::sync::{Arc, Mutex, MutexGuard, Once, ONCE_INIT};
-use std::thread;
 
 use arc_swap::ArcSwap;
 use libc::{c_int, c_void, sigaction, siginfo_t, sigset_t, SIG_BLOCK, SIG_SETMASK};
@@ -89,11 +88,11 @@ impl GlobalData {
         (signals, lock)
     }
     fn store(&self, signals: AllSignals, lock: MutexGuard<u64>) {
-        let mut previous = self.all_signals.swap(Arc::new(signals));
-        while let Err(failed_unwrap) = Arc::try_unwrap(previous) {
-            previous = failed_unwrap;
-            thread::yield_now();
-        }
+        let signals = Arc::new(signals);
+        // Strictly speaking, we are behind a mutex now (because of setting up the signal handlers
+        // and such), so the rcu would not be strictly necessary. But we use the unwrap part of it
+        // ‒ to make sure the old value gets freed outside of the signal handler.
+        self.all_signals.rcu_unwrap(|_| Arc::clone(&signals));
         drop(lock);
     }
 }
