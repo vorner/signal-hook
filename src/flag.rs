@@ -29,7 +29,7 @@ where
     signals
         .into_iter()
         .map(|sig| {
-            assert!(sig < SIGNUM as c_int);
+            assert!(sig < registry.len() as c_int);
             assert!(sig >= 0);
             let registry = Arc::clone(&registry);
             unsafe {

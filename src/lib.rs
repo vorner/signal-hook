@@ -17,6 +17,7 @@ use arc_swap::ArcSwap;
 use libc::{c_int, c_void, sigaction, siginfo_t, sigset_t, SIG_BLOCK, SIG_SETMASK};
 
 pub mod flag;
+pub mod pipe;
 
 #[derive(Copy, Clone, Debug, Eq, PartialEq, Ord, PartialOrd, Hash)]
 struct ActionId(u64);
