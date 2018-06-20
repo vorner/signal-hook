@@ -1,3 +1,6 @@
+#![doc(html_root_url = "https://docs.rs/signal-hook/0.1.0/signal-hook/")]
+#![warn(missing_docs)] // TODO: Turn to deny
+
 extern crate arc_swap;
 extern crate libc;
 
@@ -13,6 +16,8 @@ use std::sync::{Arc, Mutex, MutexGuard, Once, ONCE_INIT};
 use arc_swap::ArcSwap;
 use libc::{c_int, c_void, sigaction, siginfo_t, sigset_t, SIG_BLOCK, SIG_SETMASK};
 
+pub mod flag;
+
 #[derive(Copy, Clone, Debug, Eq, PartialEq, Ord, PartialOrd, Hash)]
 struct ActionId(u64);
 
@@ -22,7 +27,7 @@ pub struct SigId {
     action: ActionId,
 }
 
-pub type Action = Fn() + Send + Sync;
+type Action = Fn() + Send + Sync;
 
 #[derive(Clone)]
 struct Slot {
@@ -159,7 +164,10 @@ fn without_signal<F: FnOnce() -> Result<(), Error>>(signal: c_int, f: F) -> Resu
     result.and(restored)
 }
 
-pub unsafe fn register_action(signal: c_int, action: Box<Action>) -> Result<SigId, Error> {
+pub unsafe fn register_action<F>(signal: c_int, action: F) -> Result<SigId, Error>
+where
+    F: Fn() + Sync + Send + 'static,
+{
     let globals = GlobalData::ensure();
     let (mut signals, mut lock) = globals.load();
     let id = ActionId(*lock);
