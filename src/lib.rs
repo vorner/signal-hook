@@ -1,6 +1,70 @@
 #![doc(html_root_url = "https://docs.rs/signal-hook/0.1.0/signal-hook/")]
 #![warn(missing_docs)] // TODO: Turn to deny
 
+//! Library for easy and safe unix signal handling
+//!
+//! Unix signals are inherently hard to handle correctly, for several reasons:
+//!
+//! * They are a global resource. If a library wants to set its own signal handlers, it risks
+//!   disturbing some other library. It is possible to chain the previous signal handler, but then
+//!   it is impossible to remove the old signal handlers from the chains in any practical manner.
+//! * They can be called from whatever thread, requiring synchronization. Also, as they can
+//!   interrupt a thread at any time, making most handling race-prone.
+//! * According to the POSIX standard, the set of functions one may call inside a signal handler is
+//!   limitted to very few of them. To highlight, mutexes (or other locking mechanisms) and memory
+//!   allocation and deallocation is *not* allowed.
+//!
+//! This library aims to solve some of the problems. It provides a global registry of actions
+//! performed on arrival of signals. It is possible to register multiple actions for the same
+//! signal and it is possible to remove the actions later on. If there was a previous signal
+//! handler when the first action for a signal is registered, it is chained (but the original one
+//! can't be removed).
+//!
+//! The main function of the library is [`register`](fn.register.html).
+//!
+//! It also offers several common actions one might want to register, implemented in the correct
+//! way. They are scattered through submodules and have the same limitations and characteristics as
+//! the [`register`](fn.register.html) function.
+//!
+//! Unlike other Rust libraries for signal handling, this should be flexible enough to handle all
+//! the common and useful patterns.
+//!
+//! # Warning
+//!
+//! Even with this library, you should thread with care. It does not eliminate all the problems
+//! mentioned above.
+//!
+//! Also, note that the OS may collate multiple instances of the same signal into just one call of
+//! the signal handler. Furthermore, some abstractions implemented here also naturally collate
+//! multiple instances of the same signal. The general guarantee is, if there was at least one
+//! signal of the given number delivered, an action will be taken, but it is not specified how many
+//! times ‒ signals work mostly as kind of „wake up now“ nudge, if the application is slow to wake
+//! up, it may be nudged multiple times before it does so.
+//!
+//! # Signal limitations
+//!
+//! OS limits still apply ‒ it is not possible to redefine certain signals (eg. `SIGKILL` or
+//! `SIGSTOP`) and it is probably a *very* stupid idea to touch certain other ones (`SIGSEGV`,
+//! `SIGFPE`, `SIGILL`). Therefore, this library will panic if any attempt at manipulating these is
+//! made. There are some use cases for redefining the latter ones, but these are not well served by
+//! this library and you really *really* have to know what you're doing and are generally on your
+//! own doing that.
+//!
+//! # Signal masks
+//!
+//! As the library uses `sigaction` under the hood, signal masking works as expected (eg. with
+//! `sigprocmask`). This means, signals will *not* be delivered if the signal is masked in all
+//! program's threads.
+//!
+//! # Portability
+//!
+//! It should work on any POSIX.1-2001 system, which are all the major big OSes with the notable
+//! exception of Windows.
+//!
+//! Windows has some limited support for signals, patches to include support are welcome.
+
+// TODO: Document the internals
+
 extern crate arc_swap;
 extern crate libc;
 
@@ -22,6 +86,10 @@ pub mod pipe;
 #[derive(Copy, Clone, Debug, Eq, PartialEq, Ord, PartialOrd, Hash)]
 struct ActionId(u64);
 
+/// An ID of registered action.
+///
+/// This is returned by all the registration routines and can be used to remove the action later on
+/// with a call to [`unregister`](fn.unregister.html).
 #[derive(Copy, Clone, Debug, Eq, PartialEq, Ord, PartialOrd, Hash)]
 pub struct SigId {
     signal: c_int,
@@ -165,10 +233,81 @@ fn without_signal<F: FnOnce() -> Result<(), Error>>(signal: c_int, f: F) -> Resu
     result.and(restored)
 }
 
-pub unsafe fn register_action<F>(signal: c_int, action: F) -> Result<SigId, Error>
+/// Registers an arbitrary action for the given signal.
+///
+/// This makes sure there's a signal handler for the given signal. It then adds the action to the
+/// ones called each time the signal is delivered. If multiple actions are set for the same signal,
+/// all are called, in the order of registration.
+///
+/// If there was a previous signal handler for the given signal, it is chained ‒ it will be called
+/// as part of this library's signal handler, before any actions set through this function.
+///
+/// On success, the function returns an ID that can be used to remove the action again with
+/// [`unregister`](fn.unregister.html).
+///
+/// # Panics
+///
+/// If the signal is one of:
+///
+/// * `SIGKILL`
+/// * `SIGSTOP`
+/// * `SIGILL`
+/// * `SIGFPE`
+/// * `SIGSEGV`
+///
+/// The first two are not possible to override (and the underlying C functions simply ignore all
+/// requests to do so, which smells of possible bugs). The rest can be set, but generally needs
+/// very special handling to do so correctly (direct manipulation of the application's address
+/// space, `longjmp` and similar). Unless you know very well what you're doing, you'll shoot
+/// yourself into the foot and this library won't help you with that.
+///
+/// # Errors
+///
+/// Since the library manipulates signals using the low-level C functions, all these can return
+/// errors. Generally, the errors mean something like the specified signal does not exist on the
+/// given platform ‒ ofter a program is debugged and tested on a given OS, it should never return
+/// an error.
+///
+/// However, if an error *is* returned, there are no guarantees if the given action was registered.
+///
+/// # Unsafety
+///
+/// This function is unsafe, because the `action` is run inside a signal handler. The set of
+/// functions allowed to be called from within is very limited (they are called signal-safe
+/// functions by POSIX). These specifically do *not* contain mutexes and memory
+/// allocation/deallocation. They *do* contain routines to terminate the program, to further
+/// manipulate signals (by the low-level functions, not by this library) and to read and write file
+/// descriptors. Calling program's own functions consisting only of these is OK, as is manipulating
+/// program's variables ‒ however, as the action can be called on any thread that does not have the
+/// given signal masked (by default no signal is masked on any thread), and mutexes are a no-go,
+/// this is harder than it looks like at first.
+///
+/// Furthermore, panic from within the action will terminate the program ‒ unwinding out of a
+/// signal handler is UB (it's panic across FFI boundary, strictly speaking).
+///
+/// If you find these limitations hard to satisfy, choose from the helper functions in submodules
+/// of this library.
+///
+/// # Race condition
+///
+/// Currently, there's a short race condition. If this is the first action for the given signal,
+/// there was another signal handler previously and the signal comes into a different thread during
+/// this function, it can happen the original handler is not chained in this one instance.
+///
+/// This is considered unimportant problem, since most programs install their signal handlers
+/// during startup, before the signals effectively do anything. If you want to avoid the race
+/// condition completely, initialize all signal handling before starting any threads.
+///
+/// # Performance
+///
+/// Even when it is possible to repeatedly install and remove actions during the lifetime of a
+/// program, the installation and removal is considered a slow operation and should not be done
+/// very often. Also, there's limited (though huge) amount of distinct IDs (they are `u64`).
+pub unsafe fn register<F>(signal: c_int, action: F) -> Result<SigId, Error>
 where
     F: Fn() + Sync + Send + 'static,
 {
+    // TODO: Panic if signal is one of the forbidden.
     let globals = GlobalData::ensure();
     let (mut signals, mut lock) = globals.load();
     let id = ActionId(*lock);
@@ -194,6 +333,13 @@ where
     Ok(SigId { signal, action: id })
 }
 
+/// Removes a previously installed action.
+///
+/// This function does nothing if the action was already removed. It returns true if it was removed
+/// and false if the action wasn't found.
+///
+/// It can unregister all the actions installed by [`register`](fn.register.html) as well as the
+/// ones from helper submodules.
 pub fn unregister(id: SigId) -> bool {
     let globals = GlobalData::ensure();
     let (mut signals, lock) = globals.load();
