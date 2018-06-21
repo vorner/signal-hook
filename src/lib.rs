@@ -1,5 +1,5 @@
 #![doc(html_root_url = "https://docs.rs/signal-hook/0.1.0/signal-hook/")]
-#![warn(missing_docs)] // TODO: Turn to deny
+#![deny(missing_docs)]
 
 //! Library for easy and safe unix signal handling
 //!
@@ -81,6 +81,7 @@ use arc_swap::ArcSwap;
 use libc::{c_int, c_void, sigaction, siginfo_t, sigset_t, SIG_BLOCK, SIG_SETMASK};
 
 pub mod flag;
+pub mod iterator;
 pub mod pipe;
 
 #[derive(Copy, Clone, Debug, Eq, PartialEq, Ord, PartialOrd, Hash)]

@@ -14,6 +14,8 @@
 //!
 //! If it looks too low-level for your needs, the [`iterator`](iterator/) module contains some
 //! higher-lever interface that also uses a self-pipe pattern under the hood.
+//!
+//! TODO: Examples and correct order, note about spurious wakeups
 
 use std::io::Error;
 use std::os::unix::io::{AsRawFd, RawFd};
