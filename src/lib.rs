@@ -1,7 +1,7 @@
 #![doc(html_root_url = "https://docs.rs/signal-hook/0.1.0/signal-hook/")]
 #![deny(missing_docs)]
 
-//! Library for easy and safe unix signal handling
+//! Library for easy and safe Unix signal handling
 //!
 //! Unix signals are inherently hard to handle correctly, for several reasons:
 //!
@@ -11,7 +11,7 @@
 //! * They can be called from whatever thread, requiring synchronization. Also, as they can
 //!   interrupt a thread at any time, making most handling race-prone.
 //! * According to the POSIX standard, the set of functions one may call inside a signal handler is
-//!   limitted to very few of them. To highlight, mutexes (or other locking mechanisms) and memory
+//!   limited to very few of them. To highlight, mutexes (or other locking mechanisms) and memory
 //!   allocation and deallocation is *not* allowed.
 //!
 //! This library aims to solve some of the problems. It provides a global registry of actions
