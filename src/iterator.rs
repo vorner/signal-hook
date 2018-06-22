@@ -3,12 +3,51 @@
 //! This provides a higher abstraction over the signals, providing a structure
 //! ([`Signals`](struct.Signals.html)) able to iterate over the incoming signals.
 //!
+//! In the future, there will be support for asynchronous frameworks (`mio`, `futures`).
 //! Depending on the features the crate is compiled with, integration with `mio` and `futures` is
-//! provided.
+//! provided. For now it is mostly usable when there's a dedicated signal handling thread.
 //!
-//! TODO: The integrations and features, once they exist.
+//! # Examples
 //!
-//! TODO: Examples, order, spurious wakeups.
+//! ```rust
+//! extern crate libc;
+//! extern crate signal_hook;
+//!
+//! use std::io::Error;
+//! use std::thread;
+//!
+//! use signal_hook::iterator::Signals;
+//!
+//! fn main() -> Result<(), Error> {
+//!     let signals = Signals::new(&[
+//!         libc::SIGHUP,
+//!         libc::SIGTERM,
+//!         libc::SIGINT,
+//!         libc::SIGQUIT,
+//! #       libc::SIGUSR1,
+//!     ])?;
+//! #   // A trick to terminate the example when run as doc-test. Not part of the real code.
+//! #   unsafe { libc::kill(libc::getpid(), libc::SIGUSR1) };
+//!     loop {
+//!         // Pick up signals that arrived since last time
+//!         for signal in signals.pending() {
+//!             match signal as libc::c_int {
+//!                 libc::SIGHUP => {
+//!                     // Reload configuration
+//!                     // Reopen the log file
+//!                 }
+//!                 libc::SIGTERM | libc::SIGINT | libc::SIGQUIT => break,
+//!                 libc::SIGUSR1 => return Ok(()),
+//!                 _ => unreachable!(),
+//!             }
+//!         }
+//!         // Do some bit of work ‒ something with upper limit on waiting, so we don't block
+//!         // forever with a SIGTERM already waiting.
+//!     }
+//!     println!("Terminating. Bye bye");
+//!     Ok(())
+//! }
+//! ```
 
 use std::borrow::Borrow;
 use std::collections::hash_map::{HashMap, Iter};
@@ -36,11 +75,15 @@ struct Waker {
 /// them on drop. It provides the pending signals during its lifetime, either in batches or as an
 /// infinite iterator.
 ///
-/// TODO: Code example, note about multiple readers
+/// # Multiple consumers
+///
+/// You may have noticed this structure can be used simultaneously by multiple threads. If it is
+/// done, a signal arrives to one of the threads (on the first come, first serve basis). The signal
+/// is *not* broadcasted to all currently active threads.
 ///
 /// # Examples
 ///
-/// ```rust,norun
+/// ```rust
 /// # extern crate libc;
 /// # extern crate signal_hook;
 /// #
@@ -162,7 +205,7 @@ impl Signals {
     ///
     /// # Examples
     ///
-    /// ```rust,norun
+    /// ```rust
     /// # extern crate libc;
     /// # extern crate signal_hook;
     /// #

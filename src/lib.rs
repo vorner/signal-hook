@@ -24,10 +24,23 @@
 //!
 //! It also offers several common actions one might want to register, implemented in the correct
 //! way. They are scattered through submodules and have the same limitations and characteristics as
-//! the [`register`](fn.register.html) function.
+//! the [`register`](fn.register.html) function. Generally, they work to postpone the action taken
+//! outside of the signal handler, where the full freedom and power of rust is available.
 //!
 //! Unlike other Rust libraries for signal handling, this should be flexible enough to handle all
 //! the common and useful patterns.
+//!
+//! The library avoids all the newer fancy signal-handling routines. These generally have two
+//! downsides:
+//!
+//! * They are not fully portable, therefore the library would have to contain *both* the
+//!   implementation using the basic routines and the fancy ones. As signal handling is not on the
+//!   hot path of moth programs, this would not bring any actual benefit.
+//! * The other routines require that the given signal is masked in all application's threads. As
+//!   the signals are not masked by default and a new thread inherits the signal mask of its
+//!   parent, it is possible to guarantee such global mask by masking them before any threads
+//!   start. While this is possible for an application developer to do, it is not possible for a
+//!   a library.
 //!
 //! # Warning
 //!
@@ -61,9 +74,46 @@
 //! It should work on any POSIX.1-2001 system, which are all the major big OSes with the notable
 //! exception of Windows.
 //!
-//! Windows has some limited support for signals, patches to include support are welcome.
+//! Windows has some limited support for signals, patches to include support in this library are
+//! welcome.
+//!
+//! # Examples
+//!
+//! ```rust
+//! extern crate libc;
+//! extern crate signal_hook;
+//!
+//! use std::io::Error;
+//! use std::sync::Arc;
+//! use std::sync::atomic::{AtomicBool, Ordering};
+//!
+//! fn main() -> Result<(), Error> {
+//!     let term = Arc::new(AtomicBool::new(false));
+//!     signal_hook::flag::register(libc::SIGTERM, Arc::clone(&term))?;
+//!     while !term.load(Ordering::Relaxed) {
+//!         // Do some time-limited stuff here
+//!         // (if this could block forever, then there's no guarantee the signal will have any
+//!         // effect).
+//! #
+//! #       // Hack to terminate the example, not part of the real code.
+//! #       term.store(true, Ordering::Relaxed);
+//!     }
+//!     Ok(())
+//! }
+//! ```
 
-// TODO: Document the internals
+// # Internal workings
+//
+// This uses a form of RCU. There's an atomic pointer to the current action descriptors (in the
+// form of ArcSwap, to be able to track what, if any, signal handlers still use the version). A
+// signal handler takes a copy of the pointer and calls all the relevant actions.
+//
+// Modifications to that are protected by a mutex, to avoid juggling multiple signal handlers at
+// once (eg. not calling sigaction concurrently). This should not be a problem, because modifying
+// the signal actions should be initialization only anyway. To avoid all allocations and also
+// deallocations inside the signal handler, after replacing the pointer, the modification routine
+// needs to busy-wait for the reference count on the old pointer to drop to 1 and take ownership ‒
+// that way the one deallocating is the modification routine, outside of the signal handler.
 
 extern crate arc_swap;
 extern crate libc;
@@ -102,6 +152,8 @@ type Action = Fn() + Send + Sync;
 #[derive(Clone)]
 struct Slot {
     prev: sigaction,
+    // We use BTreeMap here, because we want to run the actions in the order they were inserted.
+    // This works, because the ActionIds are assigned in an increasing order.
     actions: BTreeMap<ActionId, Arc<Action>>,
 }
 
@@ -234,6 +286,21 @@ fn without_signal<F: FnOnce() -> Result<(), Error>>(signal: c_int, f: F) -> Resu
     result.and(restored)
 }
 
+/// List of forbidden signal handlers.
+///
+/// Some signals are impossible to replace according to POSIX and some are so special that this
+/// library refuses to handle them (eg. SIGSEGV). The routines panic in case registering one of
+/// these signals is attempted.
+///
+/// See [`register`](fn.register.html).
+pub const FORBIDDEN: &[c_int] = &[
+    libc::SIGKILL,
+    libc::SIGSTOP,
+    libc::SIGILL,
+    libc::SIGFPE,
+    libc::SIGSEGV,
+];
+
 /// Registers an arbitrary action for the given signal.
 ///
 /// This makes sure there's a signal handler for the given signal. It then adds the action to the
@@ -304,11 +371,32 @@ fn without_signal<F: FnOnce() -> Result<(), Error>>(signal: c_int, f: F) -> Resu
 /// Even when it is possible to repeatedly install and remove actions during the lifetime of a
 /// program, the installation and removal is considered a slow operation and should not be done
 /// very often. Also, there's limited (though huge) amount of distinct IDs (they are `u64`).
+///
+/// # Examples
+///
+/// ```rust
+/// extern crate libc;
+/// extern crate signal_hook;
+///
+/// use std::io::Error;
+/// use std::process;
+///
+/// fn main() -> Result<(), Error> {
+///     let signal = unsafe {signal_hook::register(libc::SIGTERM, || process::abort()) }?;
+///     // Stuff here...
+///     signal_hook::unregister(signal); // Not really necessary.
+///     Ok(())
+/// }
+/// ```
 pub unsafe fn register<F>(signal: c_int, action: F) -> Result<SigId, Error>
 where
     F: Fn() + Sync + Send + 'static,
 {
-    // TODO: Panic if signal is one of the forbidden.
+    assert!(
+        !FORBIDDEN.contains(&signal),
+        "Attempted to register forbidden signal {}",
+        signal,
+    );
     let globals = GlobalData::ensure();
     let (mut signals, mut lock) = globals.load();
     let id = ActionId(*lock);
@@ -341,6 +429,16 @@ where
 ///
 /// It can unregister all the actions installed by [`register`](fn.register.html) as well as the
 /// ones from helper submodules.
+///
+/// # Warning
+///
+/// This does *not* currently return the default/previous signal handler if the last action for a
+/// signal was just unregistered. That means that if you replaced for example `SIGTERM` and then
+/// removed the action, the program will effectively ignore `SIGTERM` signals from now on, not
+/// terminate on them as is the default action. This is OK if you remove it as part of a shutdown,
+/// but it is not recommended to remove termination actions during the normal runtime of
+/// application (unless the desired effect is to create something that can be terminated only by
+/// SIGKILL).
 pub fn unregister(id: SigId) -> bool {
     let globals = GlobalData::ensure();
     let (mut signals, lock) = globals.load();
@@ -352,4 +450,25 @@ pub fn unregister(id: SigId) -> bool {
         globals.store(signals, lock);
     }
     replace
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    #[should_panic]
+    fn panic_forbidden() {
+        let _ = unsafe { register(libc::SIGKILL, || ()) };
+    }
+
+    /// Check that registration works as expected and that unregister tells if it did or not.
+    #[test]
+    fn register_unregister() {
+        let signal = unsafe { register(libc::SIGUSR1, || ()).unwrap() };
+        // It was there now, so we can unregister
+        assert!(unregister(signal));
+        // The next time unregistering does nothing and tells us so.
+        assert!(!unregister(signal));
+    }
 }
