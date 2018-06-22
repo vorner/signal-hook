@@ -286,7 +286,7 @@ fn without_signal<F: FnOnce() -> Result<(), Error>>(signal: c_int, f: F) -> Resu
     result.and(restored)
 }
 
-/// List of forbidden signal handlers.
+/// List of forbidden signals.
 ///
 /// Some signals are impossible to replace according to POSIX and some are so special that this
 /// library refuses to handle them (eg. SIGSEGV). The routines panic in case registering one of
