@@ -14,7 +14,6 @@
 //! extern crate signal_hook;
 //!
 //! use std::io::Error;
-//! use std::thread;
 //!
 //! use signal_hook::iterator::Signals;
 //!
@@ -28,7 +27,7 @@
 //!     ])?;
 //! #   // A trick to terminate the example when run as doc-test. Not part of the real code.
 //! #   unsafe { libc::kill(libc::getpid(), libc::SIGUSR1) };
-//!     loop {
+//!     'outer: loop {
 //!         // Pick up signals that arrived since last time
 //!         for signal in signals.pending() {
 //!             match signal as libc::c_int {
@@ -36,7 +35,7 @@
 //!                     // Reload configuration
 //!                     // Reopen the log file
 //!                 }
-//!                 libc::SIGTERM | libc::SIGINT | libc::SIGQUIT => break,
+//!                 libc::SIGTERM | libc::SIGINT | libc::SIGQUIT => break 'outer,
 //!                 libc::SIGUSR1 => return Ok(()),
 //!                 _ => unreachable!(),
 //!             }

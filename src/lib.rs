@@ -1,4 +1,6 @@
-#![doc(html_root_url = "https://docs.rs/signal-hook/0.1.0/signal-hook/")]
+#![doc(
+    html_root_url = "https://docs.rs/signal-hook/0.1.0/signal-hook/", test(attr(deny(warnings)))
+)]
 #![deny(missing_docs)]
 
 //! Library for easy and safe Unix signal handling
