@@ -124,8 +124,6 @@ use std::collections::hash_map::Entry;
 use std::collections::{BTreeMap, HashMap};
 use std::io::Error;
 use std::mem;
-use std::panic::{self, AssertUnwindSafe};
-use std::process;
 use std::ptr;
 use std::sync::{Arc, Mutex, MutexGuard, Once, ONCE_INIT};
 
@@ -227,33 +225,27 @@ impl GlobalData {
 }
 
 extern "C" fn handler(sig: c_int, info: *mut siginfo_t, data: *mut c_void) {
-    let result = panic::catch_unwind(AssertUnwindSafe(|| {
-        let signals = GlobalData::get().all_signals.load();
+    let signals = GlobalData::get().all_signals.load();
 
-        if let Some(ref slot) = signals.get(&sig) {
-            let fptr = slot.prev.sa_sigaction;
-            if fptr != 0 && fptr != libc::SIG_DFL && fptr != libc::SIG_IGN {
-                // FFI ‒ calling the original signal handler.
-                unsafe {
-                    if slot.prev.sa_flags & libc::SA_SIGINFO == 0 {
-                        let action = mem::transmute::<usize, extern "C" fn(c_int)>(fptr);
-                        action(sig);
-                    } else {
-                        type SigAction = extern "C" fn(c_int, *mut siginfo_t, *mut c_void);
-                        let action = mem::transmute::<usize, SigAction>(fptr);
-                        action(sig, info, data);
-                    }
+    if let Some(ref slot) = signals.get(&sig) {
+        let fptr = slot.prev.sa_sigaction;
+        if fptr != 0 && fptr != libc::SIG_DFL && fptr != libc::SIG_IGN {
+            // FFI ‒ calling the original signal handler.
+            unsafe {
+                if slot.prev.sa_flags & libc::SA_SIGINFO == 0 {
+                    let action = mem::transmute::<usize, extern "C" fn(c_int)>(fptr);
+                    action(sig);
+                } else {
+                    type SigAction = extern "C" fn(c_int, *mut siginfo_t, *mut c_void);
+                    let action = mem::transmute::<usize, SigAction>(fptr);
+                    action(sig, info, data);
                 }
             }
-
-            for action in slot.actions.values() {
-                action();
-            }
         }
-    }));
-    if result.is_err() {
-        eprintln!("Panic inside a signal handler for {}", sig);
-        process::abort();
+
+        for action in slot.actions.values() {
+            action();
+        }
     }
 }
 
@@ -352,11 +344,11 @@ pub const FORBIDDEN: &[c_int] = &[
 /// given signal masked (by default no signal is masked on any thread), and mutexes are a no-go,
 /// this is harder than it looks like at first.
 ///
-/// Furthermore, panic from within the action will terminate the program ‒ unwinding out of a
-/// signal handler is UB (it's panic across FFI boundary, strictly speaking).
+/// As panicking from within a signal handler would be a panic across FFI boundary (which is
+/// undefined behavior), the passed handler must not panic.
 ///
 /// If you find these limitations hard to satisfy, choose from the helper functions in submodules
-/// of this library.
+/// of this library ‒ these provide safe interface to use some common signal handling patters.
 ///
 /// # Race condition
 ///
