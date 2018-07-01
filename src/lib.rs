@@ -68,8 +68,13 @@
 //! # Signal masks
 //!
 //! As the library uses `sigaction` under the hood, signal masking works as expected (eg. with
-//! `sigprocmask`). This means, signals will *not* be delivered if the signal is masked in all
+//! `pthread_sigmask`). This means, signals will *not* be delivered if the signal is masked in all
 //! program's threads.
+//!
+//! By the way, if you do want to modify the signal mask (or do other Unix-specific magic), the
+//! [nix](https://crates.io/crates/nix) crate offers safe interface to many low-level functions,
+//! including
+//! [`pthread_sigmask`](https://docs.rs/nix/0.11.0/nix/sys/signal/fn.pthread_sigmask.html).
 //!
 //! # Portability
 //!
