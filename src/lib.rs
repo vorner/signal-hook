@@ -1,5 +1,6 @@
 #![doc(
-    html_root_url = "https://docs.rs/signal-hook/0.1.1/signal-hook/", test(attr(deny(warnings)))
+    html_root_url = "https://docs.rs/signal-hook/0.1.2/signal-hook/",
+    test(attr(deny(warnings))),
 )]
 #![deny(missing_docs)]
 
@@ -221,16 +222,14 @@ impl GlobalData {
     }
     fn store(&self, signals: AllSignals, lock: MutexGuard<u64>) {
         let signals = Arc::new(signals);
-        // Strictly speaking, we are behind a mutex now (because of setting up the signal handlers
-        // and such), so the rcu would not be strictly necessary. But we use the unwrap part of it
-        // ‒ to make sure the old value gets freed outside of the signal handler.
-        self.all_signals.rcu_unwrap(|_| Arc::clone(&signals));
+        // We are behind a mutex, so we can safely replace it without any RCU on the ArcSwap side.
+        self.all_signals.store(signals);
         drop(lock);
     }
 }
 
 extern "C" fn handler(sig: c_int, info: *mut siginfo_t, data: *mut c_void) {
-    let signals = GlobalData::get().all_signals.load();
+    let signals = GlobalData::get().all_signals.peek_signal_safe();
 
     if let Some(ref slot) = signals.get(&sig) {
         let fptr = slot.prev.sa_sigaction;

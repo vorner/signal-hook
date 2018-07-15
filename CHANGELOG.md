@@ -1,3 +1,7 @@
+# 0.1.2
+
+* Dependency updates.
+
 # 0.1.1
 
 * Get rid of `catch_unwind` inside the signal handler.

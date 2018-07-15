@@ -1,6 +1,6 @@
 [package]
 name = "signal-hook"
-version = "0.1.1"
+version = "0.1.2"
 authors = ["Michal 'vorner' Vaner <vorner@vorner.cz>"]
 description = "Unix signal handling"
 documentation = "https://docs.rs/signal-hook"
@@ -14,7 +14,7 @@ travis-ci = { repository = "vorner/signal-hook" }
 maintenance = { status = "actively-developed" }
 
 [dependencies]
-arc-swap = "~0.1.2"
+arc-swap = "~0.2"
 libc = "~0.2"
 
 [dev-dependencies]
