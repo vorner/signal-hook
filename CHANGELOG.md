@@ -1,3 +1,5 @@
+* Dependency updates.
+
 # 0.1.2
 
 * Dependency updates.
