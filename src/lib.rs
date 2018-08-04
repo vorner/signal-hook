@@ -109,6 +109,11 @@
 //!     Ok(())
 //! }
 //! ```
+//!
+//! # Features
+//!
+//! * `mio-support`: The [`Signals` iterator](iterator/struct.Signals.html) becomes pluggable into
+//!   mio.
 
 // # Internal workings
 //
@@ -125,6 +130,10 @@
 
 extern crate arc_swap;
 extern crate libc;
+#[cfg(feature = "mio-support")]
+extern crate mio;
+#[cfg(feature = "mio-support")]
+extern crate mio_uds;
 
 use std::collections::hash_map::Entry;
 use std::collections::{BTreeMap, HashMap};

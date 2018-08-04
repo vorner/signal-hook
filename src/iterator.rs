@@ -3,10 +3,6 @@
 //! This provides a higher abstraction over the signals, providing a structure
 //! ([`Signals`](struct.Signals.html)) able to iterate over the incoming signals.
 //!
-//! In the future, there will be support for asynchronous frameworks (`mio`, `futures`).
-//! Depending on the features the crate is compiled with, integration with `mio` and `futures` is
-//! provided. For now it is mostly usable when there's a dedicated signal handling thread.
-//!
 //! # Examples
 //!
 //! ```rust
@@ -52,11 +48,14 @@ use std::borrow::Borrow;
 use std::collections::hash_map::{HashMap, Iter};
 use std::io::Error;
 use std::os::unix::io::AsRawFd;
+#[cfg(not(feature = "mio-support"))]
 use std::os::unix::net::UnixStream;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 
 use libc::{self, c_int};
+#[cfg(feature = "mio-support")]
+use mio_uds::UnixStream;
 
 use pipe;
 use SigId;
@@ -102,6 +101,13 @@ struct Waker {
 /// });
 /// # Ok(())
 /// # }
+/// ```
+///
+/// # `mio` support
+///
+/// If the crate is compiled with the `mio-support` flag, the `Signals` becomes pluggable into
+/// `mio` (it implements the `Evented` trait). If it becomes readable, there may be new signals to
+/// pick up. The structure is expected to be registered with level triggered mode.
 #[derive(Clone, Debug)]
 pub struct Signals {
     ids: Vec<SigId>,
@@ -288,6 +294,70 @@ impl<'a> Iterator for Forever<'a> {
             }
 
             self.iter = self.signals.wait();
+        }
+    }
+}
+
+#[cfg(feature = "mio-support")]
+mod mio_support {
+    use std::io::Error;
+
+    use mio::event::Evented;
+    use mio::{Poll, PollOpt, Ready, Token};
+
+    use super::Signals;
+
+    impl Evented for Signals {
+        fn register(
+            &self,
+            poll: &Poll,
+            token: Token,
+            interest: Ready,
+            opts: PollOpt,
+        ) -> Result<(), Error> {
+            self.waker.read.register(poll, token, interest, opts)
+        }
+
+        fn reregister(
+            &self,
+            poll: &Poll,
+            token: Token,
+            interest: Ready,
+            opts: PollOpt,
+        ) -> Result<(), Error> {
+            self.waker.read.reregister(poll, token, interest, opts)
+        }
+
+        fn deregister(&self, poll: &Poll) -> Result<(), Error> {
+            self.waker.read.deregister(poll)
+        }
+    }
+
+    #[cfg(test)]
+    mod tests {
+        use std::time::Duration;
+
+        use libc;
+        use mio::Events;
+
+        use super::*;
+
+        #[test]
+        fn mio_wakeup() {
+            let signals = Signals::new(&[libc::SIGUSR1]).unwrap();
+            let token = Token(0);
+            let poll = Poll::new().unwrap();
+            poll.register(&signals, token, Ready::readable(), PollOpt::level())
+                .unwrap();
+            let mut events = Events::with_capacity(10);
+            unsafe { libc::kill(libc::getpid(), libc::SIGUSR1) };
+            poll.poll(&mut events, Some(Duration::from_secs(10)))
+                .unwrap();
+            let event = events.iter().next().unwrap();
+            assert!(event.readiness().is_readable());
+            assert_eq!(token, event.token());
+            let sig = signals.pending().next().unwrap();
+            assert_eq!(libc::SIGUSR1, sig);
         }
     }
 }

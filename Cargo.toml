@@ -13,9 +13,17 @@ license = "Apache-2.0/MIT"
 travis-ci = { repository = "vorner/signal-hook" }
 maintenance = { status = "actively-developed" }
 
+[features]
+mio-support = ["mio", "mio-uds"]
+
 [dependencies]
 arc-swap = "~0.3"
 libc = "~0.2"
+mio = { version = "~0.6", optional = true }
+mio-uds = { version = "~0.6", optional = true }
 
 [dev-dependencies]
 version-sync = "~0.5"
+
+[package.metadata.docs.rs]
+features = ["mio-support"]
