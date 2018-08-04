@@ -153,10 +153,12 @@ impl Signals {
     /// Reads data from the internal self-pipe.
     ///
     /// If `wait` is `true` and there are no data in the self pipe, it blocks until some come.
-    fn flush(&self, wait: bool) {
+    ///
+    /// Returns weather it successfully read something.
+    fn flush(&self, wait: bool) -> bool {
         const SIZE: usize = 1024;
         let mut buff = [0u8; SIZE];
-        unsafe {
+        let res = unsafe {
             // We ignore all errors on purpose. This should not be something like closed file
             // descriptor. It could EAGAIN, but that's OK in case we say MSG_DONTWAIT. If it's
             // EINTR, then it's OK too, it'll only create a spurious wakeup.
@@ -165,8 +167,9 @@ impl Signals {
                 buff.as_mut_ptr() as *mut libc::c_void,
                 SIZE,
                 if wait { 0 } else { libc::MSG_DONTWAIT },
-            );
-        }
+            )
+        };
+        res > 0
     }
 
     /// Returns an iterator of already received signals.
@@ -361,3 +364,112 @@ mod mio_support {
         }
     }
 }
+
+#[cfg(feature = "tokio-support")]
+mod tokio_support {
+    use std::io::Error;
+    use std::sync::atomic::Ordering;
+
+    use futures::stream::Stream;
+    use futures::{Async, Poll};
+    use libc;
+    use tokio_reactor::{Handle, Registration};
+
+    use super::Signals;
+
+    /// An asynchronous stream of registered signals.
+    ///
+    /// See [`Signals::async`](struct.Signals.html#method.async).
+    pub struct AsyncSignals {
+        registration: Registration,
+        inner: Signals,
+        // It seems we can't easily use the iterator into the array here because of lifetimes.
+        position: usize,
+    }
+
+    impl AsyncSignals {
+        /// Creates a new `Async`.
+        pub fn new(signals: Signals, handle: &Handle) -> Result<Self, Error> {
+            let registration = Registration::new();
+            registration.register_with(&signals, handle)?;
+            Ok(AsyncSignals {
+                registration,
+                inner: signals,
+                position: 0,
+            })
+        }
+    }
+
+    impl Stream for AsyncSignals {
+        type Item = libc::c_int;
+        type Error = Error;
+        fn poll(&mut self) -> Poll<Option<libc::c_int>, Self::Error> {
+            loop {
+                if self.position >= self.inner.waker.pending.len() {
+                    if self.registration.poll_read_ready()?.is_not_ready() {
+                        return Ok(Async::NotReady);
+                    }
+                    // Non-blocking clean of the pipe
+                    while self.inner.flush(false) {}
+                    // By now we have an indication there might be some stuff inside the signals,
+                    // reset the scanning position
+                    self.position = 0;
+                }
+                assert!(self.position < self.inner.waker.pending.len());
+                // This is probably better than it looks like. There's like 32 signals on a
+                // reasonable system and we are not going to have registered all of them, so this
+                // linear scan is probably OK.
+                //
+                // We still could optimise, though, by keeping an iterator around between the loops
+                // when searching here… some other time, though.
+                let sig = self.inner.waker.pending.iter().nth(self.position).unwrap();
+                self.position += 1;
+                if sig.1.swap(false, Ordering::SeqCst) {
+                    // Successfully claimed a signal, return it
+                    return Ok(Async::Ready(Some(*sig.0)));
+                }
+            }
+        }
+    }
+
+    impl Signals {
+        /// Turns the iterator into a stream.
+        ///
+        /// This allows getting the signals in asynchronous way in a tokio event loop.
+        ///
+        /// # Examples
+        ///
+        /// ```rust
+        /// extern crate libc;
+        /// extern crate signal_hook;
+        /// extern crate tokio;
+        ///
+        /// use std::io::Error;
+        ///
+        /// use signal_hook::iterator::Signals;
+        /// use tokio::prelude::*;
+        ///
+        /// fn main() -> Result<(), Error> {
+        ///     let wait_signal = Signals::new(&[libc::SIGUSR1])?
+        ///         .async()?
+        ///         .into_future()
+        ///         .map(|sig| assert_eq!(sig.0.unwrap(), libc::SIGUSR1))
+        ///         .map_err(|e| panic!("{}", e.0));
+        ///     unsafe { libc::kill(libc::getpid(), libc::SIGUSR1) };
+        ///     tokio::run(wait_signal);
+        ///     Ok(())
+        /// }
+        /// ```
+        pub fn async(self) -> Result<AsyncSignals, Error> {
+            AsyncSignals::new(self, &Handle::current())
+        }
+
+        /// Turns the iterator into a stream, tied into a specific tokio reactor.
+        pub fn async_with_handle(self, handle: &Handle) -> Result<AsyncSignals, Error> {
+            AsyncSignals::new(self, handle)
+        }
+    }
+}
+
+#[cfg(feature = "tokio-support")]
+pub use self::tokio_support::AsyncSignals as Async;

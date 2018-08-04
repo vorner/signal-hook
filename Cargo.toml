@@ -15,15 +15,19 @@ maintenance = { status = "actively-developed" }
 
 [features]
 mio-support = ["mio", "mio-uds"]
+tokio-support = ["futures", "mio-support", "tokio-reactor"]
 
 [dependencies]
 arc-swap = "~0.3"
 libc = "~0.2"
+futures = { version = "~0.1", optional = true }
 mio = { version = "~0.6", optional = true }
 mio-uds = { version = "~0.6", optional = true }
+tokio-reactor = { version = "~0.1", optional = true }
 
 [dev-dependencies]
 version-sync = "~0.5"
+tokio = "~0.1"
 
 [package.metadata.docs.rs]
-features = ["mio-support"]
+features = ["mio-support", "tokio-support"]

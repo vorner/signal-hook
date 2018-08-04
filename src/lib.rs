@@ -114,6 +114,9 @@
 //!
 //! * `mio-support`: The [`Signals` iterator](iterator/struct.Signals.html) becomes pluggable into
 //!   mio.
+//! * `tokio-support`: The [`Signals`](iterator/struct.Signals.html) can be turned into
+//! [`Async`](iterator/struct.Async.html), which provides a `Stream` interface for integration in
+//! the asynchronous world.
 
 // # Internal workings
 //
@@ -129,11 +132,15 @@
 // that way the one deallocating is the modification routine, outside of the signal handler.
 
 extern crate arc_swap;
+#[cfg(feature = "tokio-support")]
+extern crate futures;
 extern crate libc;
 #[cfg(feature = "mio-support")]
 extern crate mio;
 #[cfg(feature = "mio-support")]
 extern crate mio_uds;
+#[cfg(feature = "tokio-support")]
+extern crate tokio_reactor;
 
 use std::collections::hash_map::Entry;
 use std::collections::{BTreeMap, HashMap};
