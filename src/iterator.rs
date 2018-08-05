@@ -3,6 +3,9 @@
 //! This provides a higher abstraction over the signals, providing a structure
 //! ([`Signals`](struct.Signals.html)) able to iterate over the incoming signals.
 //!
+//! In case the `tokio-support` feature is turned on, the [`Async`](struct.Async.html) is also
+//! available, making it possible to integrate with the tokio runtime.
+//!
 //! # Examples
 //!
 //! ```rust
@@ -32,7 +35,7 @@
 //!                     // Reopen the log file
 //!                 }
 //!                 libc::SIGTERM | libc::SIGINT | libc::SIGQUIT => break 'outer,
-//!                 libc::SIGUSR1 => return Ok(()),
+//! #               libc::SIGUSR1 => return Ok(()),
 //!                 _ => unreachable!(),
 //!             }
 //!         }
@@ -79,6 +82,12 @@ struct Waker {
 /// done, a signal arrives to one of the threads (on the first come, first serve basis). The signal
 /// is *not* broadcasted to all currently active threads.
 ///
+/// A similar thing applies to cloning the structure ‒ at least one of the copies gets the signal,
+/// but it is not broadcasted to all of them.
+///
+/// If you need multiple recipients, you can create multiple independent instances (not by cloning,
+/// but by the constructor).
+///
 /// # Examples
 ///
 /// ```rust
@@ -108,6 +117,12 @@ struct Waker {
 /// If the crate is compiled with the `mio-support` flag, the `Signals` becomes pluggable into
 /// `mio` (it implements the `Evented` trait). If it becomes readable, there may be new signals to
 /// pick up. The structure is expected to be registered with level triggered mode.
+///
+/// # `tokio` support
+///
+/// If the crate is compiled with the `tokio-support` flag, the [`into_async`](#method.into_async)
+/// method becomes available. This method turns the iterator into an asynchronous stream of
+/// received signals.
 #[derive(Clone, Debug)]
 pub struct Signals {
     ids: Vec<SigId>,
@@ -145,8 +160,7 @@ impl Signals {
                     pipe::wake(waker.write.as_raw_fd());
                 };
                 unsafe { ::register(sig, action) }
-            })
-            .collect::<Result<_, _>>()?;
+            }).collect::<Result<_, _>>()?;
         Ok(Self { ids, waker })
     }
 
@@ -193,7 +207,7 @@ impl Signals {
     /// tries to wait for some to arrive. However, due to implementation details, this still can
     /// produce an empty iterator.
     ///
-    /// This can block for arbitrary length.
+    /// This can block for arbitrary long time.
     ///
     /// Note that the blocking is done in this method, not in the iterator.
     pub fn wait(&self) -> Pending {
@@ -371,7 +385,7 @@ mod tokio_support {
     use std::sync::atomic::Ordering;
 
     use futures::stream::Stream;
-    use futures::{Async, Poll};
+    use futures::{Async as AsyncResult, Poll};
     use libc;
     use tokio_reactor::{Handle, Registration};
 
@@ -379,20 +393,34 @@ mod tokio_support {
 
     /// An asynchronous stream of registered signals.
     ///
-    /// See [`Signals::async`](struct.Signals.html#method.async).
-    pub struct AsyncSignals {
+    /// It is created by converting [`Signals`](struct.Signals.html). See
+    /// [`Signals::into_async`](struct.Signals.html#method.into_async).
+    ///
+    /// # Cloning
+    ///
+    /// If you register multiple signals, then create multiple `Signals` instances by cloning and
+    /// convert them to `Async`, one of them can „steal“ wakeups for several signals at once. This
+    /// one will produce the signals while the others will be silent.
+    ///
+    /// This has an effect if the one consumes them slowly or is dropped after the first one.
+    ///
+    /// It is recommended not to clone the `Signals` instances and keep just one `Async` stream
+    /// around.
+    #[derive(Debug)]
+    pub struct Async {
         registration: Registration,
         inner: Signals,
-        // It seems we can't easily use the iterator into the array here because of lifetimes.
+        // It seems we can't easily use the iterator into the array here because of lifetimes ‒
+        // using non-'static things in around futures is real pain.
         position: usize,
     }
 
-    impl AsyncSignals {
+    impl Async {
         /// Creates a new `Async`.
         pub fn new(signals: Signals, handle: &Handle) -> Result<Self, Error> {
             let registration = Registration::new();
             registration.register_with(&signals, handle)?;
-            Ok(AsyncSignals {
+            Ok(Async {
                 registration,
                 inner: signals,
                 position: 0,
@@ -400,14 +428,14 @@ mod tokio_support {
         }
     }
 
-    impl Stream for AsyncSignals {
+    impl Stream for Async {
         type Item = libc::c_int;
         type Error = Error;
         fn poll(&mut self) -> Poll<Option<libc::c_int>, Self::Error> {
             loop {
                 if self.position >= self.inner.waker.pending.len() {
                     if self.registration.poll_read_ready()?.is_not_ready() {
-                        return Ok(Async::NotReady);
+                        return Ok(AsyncResult::NotReady);
                     }
                     // Non-blocking clean of the pipe
                     while self.inner.flush(false) {}
@@ -426,16 +454,17 @@ mod tokio_support {
                 self.position += 1;
                 if sig.1.swap(false, Ordering::SeqCst) {
                     // Successfully claimed a signal, return it
-                    return Ok(Async::Ready(Some(*sig.0)));
+                    return Ok(AsyncResult::Ready(Some(*sig.0)));
                 }
             }
         }
     }
 
     impl Signals {
-        /// Turns the iterator into a stream.
+        /// Turns the iterator into an asynchronous stream.
         ///
-        /// This allows getting the signals in asynchronous way in a tokio event loop.
+        /// This allows getting the signals in asynchronous way in a tokio event loop. Available
+        /// only if compiled with the `tokio-support` feature enabled.
         ///
         /// # Examples
         ///
@@ -451,7 +480,7 @@ mod tokio_support {
         ///
         /// fn main() -> Result<(), Error> {
         ///     let wait_signal = Signals::new(&[libc::SIGUSR1])?
-        ///         .async()?
+        ///         .into_async()?
         ///         .into_future()
         ///         .map(|sig| assert_eq!(sig.0.unwrap(), libc::SIGUSR1))
         ///         .map_err(|e| panic!("{}", e.0));
@@ -460,16 +489,16 @@ mod tokio_support {
         ///     Ok(())
         /// }
         /// ```
-        pub fn async(self) -> Result<AsyncSignals, Error> {
-            AsyncSignals::new(self, &Handle::current())
+        pub fn into_async(self) -> Result<Async, Error> {
+            Async::new(self, &Handle::current())
         }
 
         /// Turns the iterator into a stream, tied into a specific tokio reactor.
-        pub fn async_with_handle(self, handle: &Handle) -> Result<AsyncSignals, Error> {
-            AsyncSignals::new(self, handle)
+        pub fn into_async_with_handle(self, handle: &Handle) -> Result<Async, Error> {
+            Async::new(self, handle)
         }
     }
 }
 
 #[cfg(feature = "tokio-support")]
-pub use self::tokio_support::AsyncSignals as Async;
+pub use self::tokio_support::Async;

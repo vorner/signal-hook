@@ -1,10 +1,10 @@
 #![doc(
-    html_root_url = "https://docs.rs/signal-hook/0.1.2/signal-hook/",
+    html_root_url = "https://docs.rs/signal-hook/0.1.3/signal-hook/",
     test(attr(deny(warnings))),
 )]
 #![deny(missing_docs)]
 
-//! Library for easy and safe Unix signal handling
+//! Library for easier and safe Unix signal handling
 //!
 //! Unix signals are inherently hard to handle correctly, for several reasons:
 //!
@@ -115,8 +115,8 @@
 //! * `mio-support`: The [`Signals` iterator](iterator/struct.Signals.html) becomes pluggable into
 //!   mio.
 //! * `tokio-support`: The [`Signals`](iterator/struct.Signals.html) can be turned into
-//! [`Async`](iterator/struct.Async.html), which provides a `Stream` interface for integration in
-//! the asynchronous world.
+//!   [`Async`](iterator/struct.Async.html), which provides a `Stream` interface for integration in
+//!   the asynchronous world.
 
 // # Internal workings
 //

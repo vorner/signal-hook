@@ -1,3 +1,7 @@
+# 0.1.3
+
+* Tokio support.
+* Mio support.
 * Dependency updates.
 
 # 0.1.2
