@@ -184,11 +184,17 @@ impl Slot {
         // C data structure, expected to be zeroed out.
         let mut new: libc::sigaction = unsafe { mem::zeroed() };
         new.sa_sigaction = handler as usize;
-        #[cfg(target_os = "android")]
+        #[cfg(all(target_os = "android", target_pointer_width = "32"))]
         fn flags() -> libc::c_ulong {
             (libc::SA_RESTART as libc::c_ulong)
                 | libc::SA_SIGINFO
                 | (libc::SA_NOCLDSTOP as libc::c_ulong)
+        }
+        #[cfg(all(target_os = "android", target_pointer_width = "64"))]
+        fn flags() -> libc::c_uint {
+            libc::SA_RESTART as libc::c_uint
+                | libc::SA_SIGINFO as libc::c_uint
+                | libc::SA_NOCLDSTOP as libc::c_uint
         }
         #[cfg(not(target_os = "android"))]
         fn flags() -> libc::c_int {
@@ -251,8 +257,12 @@ extern "C" fn handler(sig: c_int, info: *mut siginfo_t, data: *mut c_void) {
         let fptr = slot.prev.sa_sigaction;
         if fptr != 0 && fptr != libc::SIG_DFL && fptr != libc::SIG_IGN {
             // FFI ‒ calling the original signal handler.
+            #[cfg(all(target_os = "android", target_pointer_width = "64"))]
+            let siginfo = libc::SA_SIGINFO as libc::c_uint;
+            #[cfg(not(all(target_os = "android", target_pointer_width = "64")))]
+            let siginfo = libc::SA_SIGINFO;
             unsafe {
-                if slot.prev.sa_flags & libc::SA_SIGINFO == 0 {
+                if slot.prev.sa_flags & siginfo == 0 {
                     let action = mem::transmute::<usize, extern "C" fn(c_int)>(fptr);
                     action(sig);
                 } else {
