@@ -184,17 +184,15 @@ impl Slot {
         // C data structure, expected to be zeroed out.
         let mut new: libc::sigaction = unsafe { mem::zeroed() };
         new.sa_sigaction = handler as usize;
-        #[cfg(target_os = "android")]
-        fn flags() -> libc::c_ulong {
-            (libc::SA_RESTART as libc::c_ulong)
-                | libc::SA_SIGINFO
-                | (libc::SA_NOCLDSTOP as libc::c_ulong)
-        }
-        #[cfg(not(target_os = "android"))]
-        fn flags() -> libc::c_int {
-            libc::SA_RESTART | libc::SA_SIGINFO | libc::SA_NOCLDSTOP
-        }
-        new.sa_flags = flags();
+        // Android is broken and uses different int types than the rest (and different depending on
+        // the pointer width). This converts the flags to the proper type no matter what it is on
+        // the given platform.
+        let flags = libc::SA_RESTART | libc::SA_NOCLDSTOP;
+        #[allow(unused_assignments)]
+        let mut siginfo = flags;
+        siginfo = libc::SA_SIGINFO as _;
+        let flags = flags | siginfo;
+        new.sa_flags = flags as _;
         // C data structure, expected to be zeroed out.
         let mut old: libc::sigaction = unsafe { mem::zeroed() };
         // FFI ‒ pointers are valid, it doesn't take ownership.
@@ -252,7 +250,17 @@ extern "C" fn handler(sig: c_int, info: *mut siginfo_t, data: *mut c_void) {
         if fptr != 0 && fptr != libc::SIG_DFL && fptr != libc::SIG_IGN {
             // FFI ‒ calling the original signal handler.
             unsafe {
-                if slot.prev.sa_flags & libc::SA_SIGINFO == 0 {
+                // Android is broken and uses different int types than the rest (and different
+                // depending on the pointer width). This converts the flags to the proper type no
+                // matter what it is on the given platform.
+                //
+                // The trick is to create the same-typed variable as the sa_flags first and then
+                // set it to the proper value (does Rust have a way to copy a type in a different
+                // way?)
+                #[allow(unused_assignments)]
+                let mut siginfo = slot.prev.sa_flags;
+                siginfo = libc::SA_SIGINFO as _;
+                if slot.prev.sa_flags & siginfo == 0 {
                     let action = mem::transmute::<usize, extern "C" fn(c_int)>(fptr);
                     action(sig);
                 } else {
