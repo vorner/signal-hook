@@ -1,3 +1,7 @@
+# 0.1.4
+
+* Compilation fix for android-aarch64
+
 # 0.1.3
 
 * Tokio support.
