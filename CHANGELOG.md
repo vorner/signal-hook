@@ -1,3 +1,7 @@
+# 0.1.5
+
+* Re-exported signal constants, so users no longer need libc.
+
 # 0.1.4
 
 * Compilation fix for android-aarch64

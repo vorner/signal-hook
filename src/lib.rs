@@ -1,5 +1,5 @@
 #![doc(
-    html_root_url = "https://docs.rs/signal-hook/0.1.4/signal-hook/",
+    html_root_url = "https://docs.rs/signal-hook/0.1.5/signal-hook/",
     test(attr(deny(warnings))),
 )]
 #![deny(missing_docs)]
@@ -88,7 +88,6 @@
 //! # Examples
 //!
 //! ```rust
-//! extern crate libc;
 //! extern crate signal_hook;
 //!
 //! use std::io::Error;
@@ -97,7 +96,7 @@
 //!
 //! fn main() -> Result<(), Error> {
 //!     let term = Arc::new(AtomicBool::new(false));
-//!     signal_hook::flag::register(libc::SIGTERM, Arc::clone(&term))?;
+//!     signal_hook::flag::register(signal_hook::SIGTERM, Arc::clone(&term))?;
 //!     while !term.load(Ordering::Relaxed) {
 //!         // Do some time-limited stuff here
 //!         // (if this could block forever, then there's no guarantee the signal will have any
@@ -155,6 +154,12 @@ use libc::{c_int, c_void, sigaction, siginfo_t, sigset_t, SIG_BLOCK, SIG_SETMASK
 pub mod flag;
 pub mod iterator;
 pub mod pipe;
+
+pub use libc::{
+    SIGABRT, SIGALRM, SIGBUS, SIGCHLD, SIGCONT, SIGFPE, SIGHUP, SIGILL, SIGINT, SIGIO, SIGKILL,
+    SIGPIPE, SIGPROF, SIGPWR, SIGQUIT, SIGSEGV, SIGSTKFLT, SIGSTOP, SIGSYS, SIGTERM, SIGTRAP,
+    SIGTSTP, SIGTTIN, SIGTTOU, SIGURG, SIGUSR1, SIGUSR2, SIGVTALRM, SIGWINCH, SIGXCPU, SIGXFSZ,
+};
 
 #[derive(Copy, Clone, Debug, Eq, PartialEq, Ord, PartialOrd, Hash)]
 struct ActionId(u64);
@@ -315,13 +320,7 @@ fn without_signal<F: FnOnce() -> Result<(), Error>>(signal: c_int, f: F) -> Resu
 /// these signals is attempted.
 ///
 /// See [`register`](fn.register.html).
-pub const FORBIDDEN: &[c_int] = &[
-    libc::SIGKILL,
-    libc::SIGSTOP,
-    libc::SIGILL,
-    libc::SIGFPE,
-    libc::SIGSEGV,
-];
+pub const FORBIDDEN: &[c_int] = &[SIGKILL, SIGSTOP, SIGILL, SIGFPE, SIGSEGV];
 
 /// Registers an arbitrary action for the given signal.
 ///
@@ -397,14 +396,13 @@ pub const FORBIDDEN: &[c_int] = &[
 /// # Examples
 ///
 /// ```rust
-/// extern crate libc;
 /// extern crate signal_hook;
 ///
 /// use std::io::Error;
 /// use std::process;
 ///
 /// fn main() -> Result<(), Error> {
-///     let signal = unsafe {signal_hook::register(libc::SIGTERM, || process::abort()) }?;
+///     let signal = unsafe { signal_hook::register(signal_hook::SIGTERM, || process::abort()) }?;
 ///     // Stuff here...
 ///     signal_hook::unregister(signal); // Not really necessary.
 ///     Ok(())
@@ -481,13 +479,13 @@ mod tests {
     #[test]
     #[should_panic]
     fn panic_forbidden() {
-        let _ = unsafe { register(libc::SIGKILL, || ()) };
+        let _ = unsafe { register(SIGKILL, || ()) };
     }
 
     /// Check that registration works as expected and that unregister tells if it did or not.
     #[test]
     fn register_unregister() {
-        let signal = unsafe { register(libc::SIGUSR1, || ()).unwrap() };
+        let signal = unsafe { register(SIGUSR1, || ()).unwrap() };
         // It was there now, so we can unregister
         assert!(unregister(signal));
         // The next time unregistering does nothing and tells us so.

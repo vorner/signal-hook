@@ -24,7 +24,6 @@
 //! multiple termination signals arrive before it is handled, it recognizes the last one.
 //!
 //! ```rust
-//! extern crate libc;
 //! extern crate signal_hook;
 //!
 //! use std::io::Error;
@@ -35,12 +34,12 @@
 //!
 //! fn main() -> Result<(), Error> {
 //!     let term = Arc::new(AtomicUsize::new(0));
-//!     const SIGTERM: usize = libc::SIGTERM as usize;
-//!     const SIGINT: usize = libc::SIGINT as usize;
-//!     const SIGQUIT: usize = libc::SIGQUIT as usize;
-//!     signal_flag::register_usize(libc::SIGTERM, Arc::clone(&term), SIGTERM)?;
-//!     signal_flag::register_usize(libc::SIGINT, Arc::clone(&term), SIGINT)?;
-//!     signal_flag::register_usize(libc::SIGQUIT, Arc::clone(&term), SIGQUIT)?;
+//!     const SIGTERM: usize = signal_hook::SIGTERM as usize;
+//!     const SIGINT: usize = signal_hook::SIGINT as usize;
+//!     const SIGQUIT: usize = signal_hook::SIGQUIT as usize;
+//!     signal_flag::register_usize(signal_hook::SIGTERM, Arc::clone(&term), SIGTERM)?;
+//!     signal_flag::register_usize(signal_hook::SIGINT, Arc::clone(&term), SIGINT)?;
+//!     signal_flag::register_usize(signal_hook::SIGQUIT, Arc::clone(&term), SIGQUIT)?;
 //!
 //! #   // Hack to terminate the example when run as a doc-test.
 //! #   term.store(SIGTERM, Ordering::Relaxed);
@@ -83,10 +82,10 @@
 //!
 //! fn main() -> Result<(), Error> {
 //!     let got = Arc::new(AtomicBool::new(false));
-//!     signal_hook::flag::register(libc::SIGUSR1, Arc::clone(&got))?;
+//!     signal_hook::flag::register(signal_hook::SIGUSR1, Arc::clone(&got))?;
 //!     unsafe {
 //!         let pid = libc::getpid();
-//!         libc::kill(pid, libc::SIGUSR1);
+//!         libc::kill(pid, signal_hook::SIGUSR1);
 //!     }
 //!     // A sleep here, because it could run the signal handler in another thread and we may not
 //!     // see the flag right away. This is still a hack and not guaranteed to work, it is just an
@@ -101,7 +100,6 @@
 //! together with reopening the log file).
 //!
 //! ```rust
-//! extern crate libc;
 //! extern crate signal_hook;
 //!
 //! use std::io::Error;
@@ -114,10 +112,10 @@
 //!     // We start with true, to load the configuration in the very first iteration too.
 //!     let reload = Arc::new(AtomicBool::new(true));
 //!     let term = Arc::new(AtomicBool::new(false));
-//!     signal_flag::register(libc::SIGHUP, Arc::clone(&reload))?;
-//!     signal_flag::register(libc::SIGINT, Arc::clone(&term))?;
-//!     signal_flag::register(libc::SIGTERM, Arc::clone(&term))?;
-//!     signal_flag::register(libc::SIGQUIT, Arc::clone(&term))?;
+//!     signal_flag::register(signal_hook::SIGHUP, Arc::clone(&reload))?;
+//!     signal_flag::register(signal_hook::SIGINT, Arc::clone(&term))?;
+//!     signal_flag::register(signal_hook::SIGTERM, Arc::clone(&term))?;
+//!     signal_flag::register(signal_hook::SIGQUIT, Arc::clone(&term))?;
 //!     while !term.load(Ordering::Relaxed) {
 //!         // Using swap here, not load, to reset it back to false once it is reloaded.
 //!         if reload.swap(false, Ordering::Relaxed) {
@@ -167,7 +165,7 @@ mod tests {
     fn self_signal() {
         unsafe {
             let pid = libc::getpid();
-            libc::kill(pid, libc::SIGUSR1);
+            libc::kill(pid, ::SIGUSR1);
         }
     }
 
@@ -189,7 +187,7 @@ mod tests {
     fn register_unregister() {
         // When we register the action, it is active.
         let flag = Arc::new(AtomicBool::new(false));
-        let signal = register(libc::SIGUSR1, Arc::clone(&flag)).unwrap();
+        let signal = register(::SIGUSR1, Arc::clone(&flag)).unwrap();
         self_signal();
         assert!(wait_flag(&flag));
         // But stops working after it is unregistered.

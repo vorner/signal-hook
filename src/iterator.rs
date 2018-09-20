@@ -18,24 +18,26 @@
 //!
 //! fn main() -> Result<(), Error> {
 //!     let signals = Signals::new(&[
-//!         libc::SIGHUP,
-//!         libc::SIGTERM,
-//!         libc::SIGINT,
-//!         libc::SIGQUIT,
-//! #       libc::SIGUSR1,
+//!         signal_hook::SIGHUP,
+//!         signal_hook::SIGTERM,
+//!         signal_hook::SIGINT,
+//!         signal_hook::SIGQUIT,
+//! #       signal_hook::SIGUSR1,
 //!     ])?;
 //! #   // A trick to terminate the example when run as doc-test. Not part of the real code.
-//! #   unsafe { libc::kill(libc::getpid(), libc::SIGUSR1) };
+//! #   unsafe { libc::kill(libc::getpid(), signal_hook::SIGUSR1) };
 //!     'outer: loop {
 //!         // Pick up signals that arrived since last time
 //!         for signal in signals.pending() {
 //!             match signal as libc::c_int {
-//!                 libc::SIGHUP => {
+//!                 signal_hook::SIGHUP => {
 //!                     // Reload configuration
 //!                     // Reopen the log file
 //!                 }
-//!                 libc::SIGTERM | libc::SIGINT | libc::SIGQUIT => break 'outer,
-//! #               libc::SIGUSR1 => return Ok(()),
+//!                 signal_hook::SIGTERM | signal_hook::SIGINT | signal_hook::SIGQUIT => {
+//!                     break 'outer;
+//!                 },
+//! #               signal_hook::SIGUSR1 => return Ok(()),
 //!                 _ => unreachable!(),
 //!             }
 //!         }
@@ -91,19 +93,20 @@ struct Waker {
 /// # Examples
 ///
 /// ```rust
-/// # extern crate libc;
 /// # extern crate signal_hook;
 /// #
 /// # use std::io::Error;
 /// # use std::thread;
+/// use signal_hook::iterator::Signals;
+///
 /// #
 /// # fn main() -> Result<(), Error> {
-/// let signals = signal_hook::iterator::Signals::new(&[libc::SIGUSR1, libc::SIGUSR2])?;
+/// let signals = Signals::new(&[signal_hook::SIGUSR1, signal_hook::SIGUSR2])?;
 /// thread::spawn(move || {
 ///     for signal in &signals {
 ///         match signal {
-///             libc::SIGUSR1 => {},
-///             libc::SIGUSR2 => {},
+///             signal_hook::SIGUSR1 => {},
+///             signal_hook::SIGUSR2 => {},
 ///             _ => unreachable!(),
 ///         }
 ///     }
@@ -234,13 +237,15 @@ impl Signals {
     /// # use std::io::Error;
     /// # use std::thread;
     /// #
+    /// use signal_hook::iterator::Signals;
+    ///
     /// # fn main() -> Result<(), Error> {
-    /// let signals = signal_hook::iterator::Signals::new(&[libc::SIGUSR1, libc::SIGUSR2])?;
+    /// let signals = Signals::new(&[signal_hook::SIGUSR1, signal_hook::SIGUSR2])?;
     /// thread::spawn(move || {
     ///     for signal in signals.forever() {
     ///         match signal {
-    ///             libc::SIGUSR1 => {},
-    ///             libc::SIGUSR2 => {},
+    ///             signal_hook::SIGUSR1 => {},
+    ///             signal_hook::SIGUSR2 => {},
     ///             _ => unreachable!(),
     ///         }
     ///     }
@@ -361,20 +366,20 @@ mod mio_support {
 
         #[test]
         fn mio_wakeup() {
-            let signals = Signals::new(&[libc::SIGUSR1]).unwrap();
+            let signals = Signals::new(&[::SIGUSR1]).unwrap();
             let token = Token(0);
             let poll = Poll::new().unwrap();
             poll.register(&signals, token, Ready::readable(), PollOpt::level())
                 .unwrap();
             let mut events = Events::with_capacity(10);
-            unsafe { libc::kill(libc::getpid(), libc::SIGUSR1) };
+            unsafe { libc::kill(libc::getpid(), ::SIGUSR1) };
             poll.poll(&mut events, Some(Duration::from_secs(10)))
                 .unwrap();
             let event = events.iter().next().unwrap();
             assert!(event.readiness().is_readable());
             assert_eq!(token, event.token());
             let sig = signals.pending().next().unwrap();
-            assert_eq!(libc::SIGUSR1, sig);
+            assert_eq!(::SIGUSR1, sig);
         }
     }
 }
@@ -479,12 +484,12 @@ mod tokio_support {
         /// use tokio::prelude::*;
         ///
         /// fn main() -> Result<(), Error> {
-        ///     let wait_signal = Signals::new(&[libc::SIGUSR1])?
+        ///     let wait_signal = Signals::new(&[signal_hook::SIGUSR1])?
         ///         .into_async()?
         ///         .into_future()
-        ///         .map(|sig| assert_eq!(sig.0.unwrap(), libc::SIGUSR1))
+        ///         .map(|sig| assert_eq!(sig.0.unwrap(), signal_hook::SIGUSR1))
         ///         .map_err(|e| panic!("{}", e.0));
-        ///     unsafe { libc::kill(libc::getpid(), libc::SIGUSR1) };
+        ///     unsafe { libc::kill(libc::getpid(), signal_hook::SIGUSR1) };
         ///     tokio::run(wait_signal);
         ///     Ok(())
         /// }
