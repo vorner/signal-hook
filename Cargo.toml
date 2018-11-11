@@ -1,6 +1,6 @@
 [package]
 name = "signal-hook"
-version = "0.1.5"
+version = "0.1.6"
 authors = ["Michal 'vorner' Vaner <vorner@vorner.cz>"]
 description = "Unix signal handling"
 documentation = "https://docs.rs/signal-hook"
@@ -18,7 +18,7 @@ mio-support = ["mio", "mio-uds"]
 tokio-support = ["futures", "mio-support", "tokio-reactor"]
 
 [dependencies]
-arc-swap = "~0.3"
+arc-swap = "~0.3.5"
 libc = "~0.2"
 futures = { version = "~0.1", optional = true }
 mio = { version = "~0.6", optional = true }

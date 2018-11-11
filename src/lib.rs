@@ -1,6 +1,6 @@
 #![doc(
-    html_root_url = "https://docs.rs/signal-hook/0.1.5/signal-hook/",
-    test(attr(deny(warnings))),
+    html_root_url = "https://docs.rs/signal-hook/0.1.6/signal-hook/",
+    test(attr(deny(warnings)))
 )]
 #![deny(missing_docs)]
 
@@ -120,8 +120,8 @@
 // # Internal workings
 //
 // This uses a form of RCU. There's an atomic pointer to the current action descriptors (in the
-// form of ArcSwap, to be able to track what, if any, signal handlers still use the version). A
-// signal handler takes a copy of the pointer and calls all the relevant actions.
+// form of IndependentArcSwap, to be able to track what, if any, signal handlers still use the
+// version). A signal handler takes a copy of the pointer and calls all the relevant actions.
 //
 // Modifications to that are protected by a mutex, to avoid juggling multiple signal handlers at
 // once (eg. not calling sigaction concurrently). This should not be a problem, because modifying
@@ -148,7 +148,7 @@ use std::mem;
 use std::ptr;
 use std::sync::{Arc, Mutex, MutexGuard, Once, ONCE_INIT};
 
-use arc_swap::ArcSwap;
+use arc_swap::IndependentArcSwap;
 use libc::{c_int, c_void, sigaction, siginfo_t, sigset_t, SIG_BLOCK, SIG_SETMASK};
 
 pub mod flag;
@@ -214,7 +214,7 @@ impl Slot {
 type AllSignals = HashMap<c_int, Slot>;
 
 struct GlobalData {
-    all_signals: ArcSwap<AllSignals>,
+    all_signals: IndependentArcSwap<AllSignals>,
     rcu_lock: Mutex<u64>,
 }
 
@@ -228,7 +228,7 @@ impl GlobalData {
     fn ensure() -> &'static Self {
         GLOBAL_INIT.call_once(|| unsafe {
             GLOBAL_DATA = Some(GlobalData {
-                all_signals: ArcSwap::from(Arc::new(HashMap::new())),
+                all_signals: IndependentArcSwap::from_pointee(HashMap::new()),
                 rcu_lock: Mutex::new(0),
             });
         });

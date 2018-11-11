@@ -163,7 +163,8 @@ impl Signals {
                     pipe::wake(waker.write.as_raw_fd());
                 };
                 unsafe { ::register(sig, action) }
-            }).collect::<Result<_, _>>()?;
+            })
+            .collect::<Result<_, _>>()?;
         Ok(Self { ids, waker })
     }
 
