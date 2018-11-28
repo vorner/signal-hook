@@ -29,7 +29,7 @@
 //!     'outer: loop {
 //!         // Pick up signals that arrived since last time
 //!         for signal in signals.pending() {
-//!             match signal as libc::c_int {
+//!             match signal {
 //!                 signal_hook::SIGHUP => {
 //!                     // Reload configuration
 //!                     // Reopen the log file
@@ -58,16 +58,16 @@ use std::os::unix::net::UnixStream;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 
-use libc::{self, c_int};
+use libc;
 #[cfg(feature = "mio-support")]
 use mio_uds::UnixStream;
 
 use pipe;
-use SigId;
+use {SigId, SigNo};
 
 #[derive(Debug)]
 struct Waker {
-    pending: HashMap<c_int, AtomicBool>,
+    pending: HashMap<SigNo, AtomicBool>,
     read: UnixStream,
     write: UnixStream,
 }
@@ -140,7 +140,7 @@ impl Signals {
     pub fn new<I, S>(signals: I) -> Result<Self, Error>
     where
         I: IntoIterator<Item = S>,
-        S: Borrow<c_int>,
+        S: Borrow<SigNo>,
     {
         let (read, write) = UnixStream::pair()?;
         let pending = signals
@@ -271,7 +271,7 @@ impl Drop for Signals {
 }
 
 impl<'a> IntoIterator for &'a Signals {
-    type Item = c_int;
+    type Item = SigNo;
     type IntoIter = Forever<'a>;
     fn into_iter(self) -> Forever<'a> {
         self.forever()
@@ -282,12 +282,12 @@ impl<'a> IntoIterator for &'a Signals {
 ///
 /// This is returned by the [`pending`](struct.Signals.html#method.pending) and
 /// [`wait`](struct.Signals.html#method.wait) methods.
-pub struct Pending<'a>(Iter<'a, c_int, AtomicBool>);
+pub struct Pending<'a>(Iter<'a, SigNo, AtomicBool>);
 
 impl<'a> Iterator for Pending<'a> {
-    type Item = c_int;
+    type Item = SigNo;
 
-    fn next(&mut self) -> Option<c_int> {
+    fn next(&mut self) -> Option<SigNo> {
         while let Some((sig, flag)) = self.0.next() {
             if flag.swap(false, Ordering::SeqCst) {
                 return Some(*sig);
@@ -308,9 +308,9 @@ pub struct Forever<'a> {
 }
 
 impl<'a> Iterator for Forever<'a> {
-    type Item = c_int;
+    type Item = SigNo;
 
-    fn next(&mut self) -> Option<c_int> {
+    fn next(&mut self) -> Option<SigNo> {
         loop {
             if let Some(result) = self.iter.next() {
                 return Some(result);
@@ -435,9 +435,9 @@ mod tokio_support {
     }
 
     impl Stream for Async {
-        type Item = libc::c_int;
+        type Item = SigNo;
         type Error = Error;
-        fn poll(&mut self) -> Poll<Option<libc::c_int>, Self::Error> {
+        fn poll(&mut self) -> Poll<Option<SigNo>, Self::Error> {
             loop {
                 if self.position >= self.inner.waker.pending.len() {
                     if self.registration.poll_read_ready()?.is_not_ready() {

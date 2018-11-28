@@ -77,9 +77,9 @@
 use std::io::Error;
 use std::os::unix::io::{AsRawFd, RawFd};
 
-use libc::{self, c_int};
+use libc;
 
-use SigId;
+use {SigId, SigNo};
 
 pub(crate) fn wake(pipe: RawFd) {
     unsafe {
@@ -101,7 +101,7 @@ pub(crate) fn wake(pipe: RawFd) {
 ///
 /// In this case, the pipe is taken as the `RawFd`. It is still the caller's responsibility to
 /// close it.
-pub fn register_raw(signal: c_int, pipe: RawFd) -> Result<SigId, Error> {
+pub fn register_raw(signal: SigNo, pipe: RawFd) -> Result<SigId, Error> {
     unsafe { ::register(signal, move || wake(pipe)) }
 }
 
@@ -111,7 +111,7 @@ pub fn register_raw(signal: c_int, pipe: RawFd) -> Result<SigId, Error> {
 ///
 /// Note that if you want to register the same pipe for multiple signals, there's `try_clone`
 /// method on many unix socket primitives.
-pub fn register<P>(signal: c_int, pipe: P) -> Result<SigId, Error>
+pub fn register<P>(signal: SigNo, pipe: P) -> Result<SigId, Error>
 where
     P: AsRawFd + Send + Sync + 'static,
 {

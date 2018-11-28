@@ -1,7 +1,14 @@
+# Upcoming (unreleased) changes
+
+* Exposed a new `SigNo` type to represent the correct integer type for
+  signal numbers.  This prevents users of this library from having to
+  directly address `libc::c_int`.
+
 # 0.1.6
 
 * The internally used ArcSwap thing doesn't block other ArcSwaps now (has
   independent generation lock).
+
 # 0.1.5
 
 * Re-exported signal constants, so users no longer need libc.

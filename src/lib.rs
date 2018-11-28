@@ -149,11 +149,14 @@ use std::ptr;
 use std::sync::{Arc, Mutex, MutexGuard, Once, ONCE_INIT};
 
 use arc_swap::IndependentArcSwap;
-use libc::{c_int, c_void, sigaction, siginfo_t, sigset_t, SIG_BLOCK, SIG_SETMASK};
+use libc::{c_void, sigaction, siginfo_t, sigset_t, SIG_BLOCK, SIG_SETMASK};
 
 pub mod flag;
 pub mod iterator;
 pub mod pipe;
+
+/// The numerical identifier of a signal.
+pub type SigNo = libc::c_int;
 
 pub use libc::{
     SIGABRT, SIGALRM, SIGBUS, SIGCHLD, SIGCONT, SIGFPE, SIGHUP, SIGILL, SIGINT, SIGIO, SIGKILL,
@@ -170,7 +173,7 @@ struct ActionId(u64);
 /// with a call to [`unregister`](fn.unregister.html).
 #[derive(Copy, Clone, Debug, Eq, PartialEq, Ord, PartialOrd, Hash)]
 pub struct SigId {
-    signal: c_int,
+    signal: SigNo,
     action: ActionId,
 }
 
@@ -185,7 +188,7 @@ struct Slot {
 }
 
 impl Slot {
-    fn new(signal: libc::c_int) -> Result<Self, Error> {
+    fn new(signal: SigNo) -> Result<Self, Error> {
         // C data structure, expected to be zeroed out.
         let mut new: libc::sigaction = unsafe { mem::zeroed() };
         new.sa_sigaction = handler as usize;
@@ -211,7 +214,7 @@ impl Slot {
     }
 }
 
-type AllSignals = HashMap<c_int, Slot>;
+type AllSignals = HashMap<SigNo, Slot>;
 
 struct GlobalData {
     all_signals: IndependentArcSwap<AllSignals>,
@@ -247,7 +250,7 @@ impl GlobalData {
     }
 }
 
-extern "C" fn handler(sig: c_int, info: *mut siginfo_t, data: *mut c_void) {
+extern "C" fn handler(sig: SigNo, info: *mut siginfo_t, data: *mut c_void) {
     let signals = GlobalData::get().all_signals.peek_signal_safe();
 
     if let Some(ref slot) = signals.get(&sig) {
@@ -266,10 +269,10 @@ extern "C" fn handler(sig: c_int, info: *mut siginfo_t, data: *mut c_void) {
                 let mut siginfo = slot.prev.sa_flags;
                 siginfo = libc::SA_SIGINFO as _;
                 if slot.prev.sa_flags & siginfo == 0 {
-                    let action = mem::transmute::<usize, extern "C" fn(c_int)>(fptr);
+                    let action = mem::transmute::<usize, extern "C" fn(SigNo)>(fptr);
                     action(sig);
                 } else {
-                    type SigAction = extern "C" fn(c_int, *mut siginfo_t, *mut c_void);
+                    type SigAction = extern "C" fn(SigNo, *mut siginfo_t, *mut c_void);
                     let action = mem::transmute::<usize, SigAction>(fptr);
                     action(sig, info, data);
                 }
@@ -282,7 +285,7 @@ extern "C" fn handler(sig: c_int, info: *mut siginfo_t, data: *mut c_void) {
     }
 }
 
-fn block_signal(signal: c_int) -> Result<sigset_t, Error> {
+fn block_signal(signal: SigNo) -> Result<sigset_t, Error> {
     unsafe {
         let mut newsigs: sigset_t = mem::uninitialized();
         libc::sigemptyset(&mut newsigs);
@@ -305,7 +308,7 @@ fn restore_signals(signals: libc::sigset_t) -> Result<(), Error> {
     }
 }
 
-fn without_signal<F: FnOnce() -> Result<(), Error>>(signal: c_int, f: F) -> Result<(), Error> {
+fn without_signal<F: FnOnce() -> Result<(), Error>>(signal: SigNo, f: F) -> Result<(), Error> {
     let old_signals = block_signal(signal)?;
     let result = f();
     let restored = restore_signals(old_signals);
@@ -320,7 +323,7 @@ fn without_signal<F: FnOnce() -> Result<(), Error>>(signal: c_int, f: F) -> Resu
 /// these signals is attempted.
 ///
 /// See [`register`](fn.register.html).
-pub const FORBIDDEN: &[c_int] = &[SIGKILL, SIGSTOP, SIGILL, SIGFPE, SIGSEGV];
+pub const FORBIDDEN: &[SigNo] = &[SIGKILL, SIGSTOP, SIGILL, SIGFPE, SIGSEGV];
 
 /// Registers an arbitrary action for the given signal.
 ///
@@ -408,7 +411,7 @@ pub const FORBIDDEN: &[c_int] = &[SIGKILL, SIGSTOP, SIGILL, SIGFPE, SIGSEGV];
 ///     Ok(())
 /// }
 /// ```
-pub unsafe fn register<F>(signal: c_int, action: F) -> Result<SigId, Error>
+pub unsafe fn register<F>(signal: SigNo, action: F) -> Result<SigId, Error>
 where
     F: Fn() + Sync + Send + 'static,
 {

@@ -12,7 +12,7 @@ mod tests {
     use self::tokio::prelude::*;
     use self::tokio::timer::Interval;
 
-    fn send_sig(sig: libc::c_int) {
+    fn send_sig(sig: SigNo) {
         unsafe { libc::kill(libc::getpid(), sig) };
     }
 
