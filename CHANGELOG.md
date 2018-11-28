@@ -1,8 +1,13 @@
 # Upcoming (unreleased) changes
 
-* Exposed a new `SigNo` type to represent the correct integer type for
+* Exposed a new `SigNoInt` type to represent the correct integer type for
   signal numbers.  This prevents users of this library from having to
-  directly address `libc::c_int`.
+  directly address `libc::c_int` or know that they are `i32`s.
+
+* Exposed signal numbers as a `SigNo` enum with the ability to format their
+  values as user-friendly strings.  Previous implementations exposed these
+  as raw `i32`s but the internal representation of `SigNo` is the same so
+  old code should continue to compile unmodified.
 
 # 0.1.6
 

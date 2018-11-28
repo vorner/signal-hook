@@ -143,6 +143,7 @@ extern crate tokio_reactor;
 
 use std::collections::hash_map::Entry;
 use std::collections::{BTreeMap, HashMap};
+use std::fmt;
 use std::io::Error;
 use std::mem;
 use std::ptr;
@@ -155,14 +156,109 @@ pub mod flag;
 pub mod iterator;
 pub mod pipe;
 
-/// The numerical identifier of a signal.
-pub type SigNo = libc::c_int;
+/// Actual numerical type of the signal number.
+pub type SigNoInt = i32;
 
-pub use libc::{
-    SIGABRT, SIGALRM, SIGBUS, SIGCHLD, SIGCONT, SIGFPE, SIGHUP, SIGILL, SIGINT, SIGIO, SIGKILL,
-    SIGPIPE, SIGPROF, SIGQUIT, SIGSEGV, SIGSTOP, SIGSYS, SIGTERM, SIGTRAP, SIGUSR1, SIGUSR2,
-    SIGWINCH,
-};
+/// Numerical identifier of a signal.
+#[allow(missing_docs)]
+#[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
+#[repr(i32)]
+pub enum SigNo {
+    UnknownSigno = -1,
+    SIGABRT = libc::SIGABRT,
+    SIGALRM = libc::SIGALRM,
+    SIGBUS = libc::SIGBUS,
+    SIGCHLD = libc::SIGCHLD,
+    SIGCONT = libc::SIGCONT,
+    SIGFPE = libc::SIGFPE,
+    SIGHUP = libc::SIGHUP,
+    SIGILL = libc::SIGILL,
+    SIGINT = libc::SIGINT,
+    SIGIO = libc::SIGIO,
+    SIGKILL = libc::SIGKILL,
+    SIGPIPE = libc::SIGPIPE,
+    SIGPROF = libc::SIGPROF,
+    SIGQUIT = libc::SIGQUIT,
+    SIGSEGV = libc::SIGSEGV,
+    SIGSTOP = libc::SIGSTOP,
+    SIGSYS = libc::SIGSYS,
+    SIGTERM = libc::SIGTERM,
+    SIGTRAP = libc::SIGTRAP,
+    SIGUSR1 = libc::SIGUSR1,
+    SIGUSR2 = libc::SIGUSR2,
+    SIGWINCH = libc::SIGWINCH,
+}
+
+// Expose signal names at the root for backwards compatibility with pre-0.1.7 versions.
+pub use SigNo::*;
+
+impl SigNo {
+    /// Creates a new `SigNo` from a raw integer of size `SigNoInt`.
+    pub fn from_int(signo: SigNoInt) -> SigNo {
+        use SigNo::*;
+
+        match signo {
+            libc::SIGABRT => SIGABRT,
+            libc::SIGALRM => SIGALRM,
+            libc::SIGBUS => SIGBUS,
+            libc::SIGCHLD => SIGCHLD,
+            libc::SIGCONT => SIGCONT,
+            libc::SIGFPE => SIGFPE,
+            libc::SIGHUP => SIGHUP,
+            libc::SIGILL => SIGILL,
+            libc::SIGINT => SIGINT,
+            libc::SIGIO => SIGIO,
+            libc::SIGKILL => SIGKILL,
+            libc::SIGPIPE => SIGPIPE,
+            libc::SIGPROF => SIGPROF,
+            libc::SIGQUIT => SIGQUIT,
+            libc::SIGSEGV => SIGSEGV,
+            libc::SIGSTOP => SIGSTOP,
+            libc::SIGSYS => SIGSYS,
+            libc::SIGTERM => SIGTERM,
+            libc::SIGTRAP => SIGTRAP,
+            libc::SIGUSR1 => SIGUSR1,
+            libc::SIGUSR2 => SIGUSR2,
+            libc::SIGWINCH => SIGWINCH,
+            _ => UnknownSigno,
+        }
+    }
+
+    /// Returns a user-readable description of the signal.
+    pub fn desc(self) -> &'static str {
+        match self as SigNoInt {
+            libc::SIGABRT => "Abort trap",
+            libc::SIGALRM => "Timer expired",
+            libc::SIGBUS => "Bus error",
+            libc::SIGCHLD => "Child stopped or terminated",
+            libc::SIGCONT => "Continue",
+            libc::SIGFPE => "Floating point exception",
+            libc::SIGHUP => "Hangup",
+            libc::SIGILL => "Illegal instruction",
+            libc::SIGINT => "Interrupted",
+            libc::SIGIO => "Pollable event",
+            libc::SIGKILL => "Killed",
+            libc::SIGPIPE => "Broken pipe",
+            libc::SIGPROF => "Profiling timer expired",
+            libc::SIGQUIT => "Quit",
+            libc::SIGSEGV => "Segmentation fault",
+            libc::SIGSTOP => "Stopped",
+            libc::SIGSYS => "Bad system call",
+            libc::SIGTERM => "Terminated",
+            libc::SIGTRAP => "Breakpoint",
+            libc::SIGUSR1 => "User-defined signal 1",
+            libc::SIGUSR2 => "User-defined signal 2",
+            libc::SIGWINCH => "Window size change",
+            _ => "Unknown signal number",
+        }
+    }
+}
+
+impl fmt::Display for SigNo {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "{} (signal {})", self.desc(), *self as SigNoInt)
+    }
+}
 
 #[derive(Copy, Clone, Debug, Eq, PartialEq, Ord, PartialOrd, Hash)]
 struct ActionId(u64);
@@ -204,7 +300,7 @@ impl Slot {
         // C data structure, expected to be zeroed out.
         let mut old: libc::sigaction = unsafe { mem::zeroed() };
         // FFI ‒ pointers are valid, it doesn't take ownership.
-        if unsafe { libc::sigaction(signal, &new, &mut old) } != 0 {
+        if unsafe { libc::sigaction(signal as SigNoInt, &new, &mut old) } != 0 {
             return Err(Error::last_os_error());
         }
         Ok(Slot {
@@ -289,7 +385,7 @@ fn block_signal(signal: SigNo) -> Result<sigset_t, Error> {
     unsafe {
         let mut newsigs: sigset_t = mem::uninitialized();
         libc::sigemptyset(&mut newsigs);
-        libc::sigaddset(&mut newsigs, signal);
+        libc::sigaddset(&mut newsigs, signal as SigNoInt);
         let mut oldsigs: sigset_t = mem::uninitialized();
         libc::sigemptyset(&mut oldsigs);
         if libc::sigprocmask(SIG_BLOCK, &newsigs, &mut oldsigs) == 0 {
@@ -323,7 +419,8 @@ fn without_signal<F: FnOnce() -> Result<(), Error>>(signal: SigNo, f: F) -> Resu
 /// these signals is attempted.
 ///
 /// See [`register`](fn.register.html).
-pub const FORBIDDEN: &[SigNo] = &[SIGKILL, SIGSTOP, SIGILL, SIGFPE, SIGSEGV];
+pub const FORBIDDEN: &[SigNo] = &[
+    SigNo::SIGKILL, SigNo::SIGSTOP, SigNo::SIGILL, SigNo::SIGFPE, SigNo::SIGSEGV];
 
 /// Registers an arbitrary action for the given signal.
 ///
@@ -482,13 +579,13 @@ mod tests {
     #[test]
     #[should_panic]
     fn panic_forbidden() {
-        let _ = unsafe { register(SIGKILL, || ()) };
+        let _ = unsafe { register(SigNo::SIGKILL, || ()) };
     }
 
     /// Check that registration works as expected and that unregister tells if it did or not.
     #[test]
     fn register_unregister() {
-        let signal = unsafe { register(SIGUSR1, || ()).unwrap() };
+        let signal = unsafe { register(SigNo::SIGUSR1, || ()).unwrap() };
         // It was there now, so we can unregister
         assert!(unregister(signal));
         // The next time unregistering does nothing and tells us so.

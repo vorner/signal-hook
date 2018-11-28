@@ -135,7 +135,7 @@ use std::io::Error;
 use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::sync::Arc;
 
-use {SigId, SigNo};
+use {SigId, SigNo, SigNoInt};
 
 /// Registers an action to set the flag to `true` whenever the given signal arrives.
 pub fn register(signal: SigNo, flag: Arc<AtomicBool>) -> Result<SigId, Error> {
@@ -163,7 +163,7 @@ mod tests {
     fn self_signal() {
         unsafe {
             let pid = libc::getpid();
-            libc::kill(pid, ::SIGUSR1);
+            libc::kill(pid, SigNo::SIGUSR1 as SigNoInt);
         }
     }
 
@@ -185,7 +185,7 @@ mod tests {
     fn register_unregister() {
         // When we register the action, it is active.
         let flag = Arc::new(AtomicBool::new(false));
-        let signal = register(::SIGUSR1, Arc::clone(&flag)).unwrap();
+        let signal = register(SigNo::SIGUSR1, Arc::clone(&flag)).unwrap();
         self_signal();
         assert!(wait_flag(&flag));
         // But stops working after it is unregistered.
