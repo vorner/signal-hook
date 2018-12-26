@@ -1,7 +1,14 @@
+# 0.1.7
+
+* The `Signals` iterator allows adding signals after creation.
+* Fixed a bug where `Signals` registrations could be unregirestered too soon if
+  the `Signals` was cloned previously.
+
 # 0.1.6
 
 * The internally used ArcSwap thing doesn't block other ArcSwaps now (has
   independent generation lock).
+
 # 0.1.5
 
 * Re-exported signal constants, so users no longer need libc.

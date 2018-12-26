@@ -50,13 +50,14 @@
 //! ```
 
 use std::borrow::Borrow;
-use std::collections::hash_map::{HashMap, Iter};
 use std::io::Error;
+use std::iter::Enumerate;
 use std::os::unix::io::AsRawFd;
 #[cfg(not(feature = "mio-support"))]
 use std::os::unix::net::UnixStream;
+use std::slice::Iter;
 use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
 
 use libc::{self, c_int};
 #[cfg(feature = "mio-support")]
@@ -65,11 +66,26 @@ use mio_uds::UnixStream;
 use pipe;
 use SigId;
 
+/// Maximal signal number we support.
+const MAX_SIGNUM: usize = 128;
+
 #[derive(Debug)]
 struct Waker {
-    pending: HashMap<c_int, AtomicBool>,
+    pending: Vec<AtomicBool>,
     read: UnixStream,
     write: UnixStream,
+}
+
+#[derive(Debug)]
+struct RegisteredSignals(Mutex<Vec<Option<SigId>>>);
+
+impl Drop for RegisteredSignals {
+    fn drop(&mut self) {
+        let lock = self.0.lock().unwrap();
+        for id in lock.iter().filter_map(|s| *s) {
+            ::unregister(id);
+        }
+    }
 }
 
 /// The main structure of the module, representing interest in some signals.
@@ -128,7 +144,7 @@ struct Waker {
 /// received signals.
 #[derive(Clone, Debug)]
 pub struct Signals {
-    ids: Vec<SigId>,
+    ids: Arc<RegisteredSignals>,
     waker: Arc<Waker>,
 }
 
@@ -143,29 +159,60 @@ impl Signals {
         S: Borrow<c_int>,
     {
         let (read, write) = UnixStream::pair()?;
-        let pending = signals
-            .into_iter()
-            .map(|sig| (*sig.borrow(), AtomicBool::new(false)))
-            .collect();
+        let pending = (0..MAX_SIGNUM).map(|_| AtomicBool::new(false)).collect();
         let waker = Arc::new(Waker {
             pending,
             read,
             write,
         });
-        let ids = waker
-            .pending
-            .keys()
-            .map(|sig| {
-                let sig = *sig;
-                let waker = Arc::clone(&waker);
-                let action = move || {
-                    waker.pending[&sig].store(true, Ordering::SeqCst);
-                    pipe::wake(waker.write.as_raw_fd());
-                };
-                unsafe { ::register(sig, action) }
-            })
-            .collect::<Result<_, _>>()?;
-        Ok(Self { ids, waker })
+        let ids = (0..MAX_SIGNUM).map(|_| None).collect();
+        let me = Self {
+            ids: Arc::new(RegisteredSignals(Mutex::new(ids))),
+            waker,
+        };
+        for sig in signals {
+            me.add_signal(*sig.borrow())?;
+        }
+        Ok(me)
+    }
+
+    /// Registers another signal to the set watched by this [`Signals`] instance.
+    ///
+    /// # Notes
+    ///
+    /// * This is safe to call concurrently from whatever thread.
+    /// * This is *not* safe to call from within a signal handler.
+    /// * If the signal number was already registered previously, this is a no-op.
+    /// * If this errors, the original set of signals is left intact.
+    /// * This actually registers the signal into the whole group of [`Signals`] cloned from each
+    ///   other, so any of them might start receiving the signals.
+    ///
+    /// # Panics
+    ///
+    /// * If the given signal is [forbidden][::FORBIDDEN].
+    /// * If the signal number is negative or larger than internal limit. The limit should be
+    ///   larger than any supported signal the OS supports.
+    pub fn add_signal(&self, signal: c_int) -> Result<(), Error> {
+        assert!(signal >= 0);
+        assert!(
+            (signal as usize) < MAX_SIGNUM,
+            "Signal number {} too large. If your OS really supports such signal, file a bug",
+            signal,
+        );
+        let mut lock = self.ids.0.lock().unwrap();
+        // Already registered, ignoring
+        if lock[signal as usize].is_some() {
+            return Ok(());
+        }
+
+        let waker = Arc::clone(&self.waker);
+        let action = move || {
+            waker.pending[signal as usize].store(true, Ordering::SeqCst);
+            pipe::wake(waker.write.as_raw_fd());
+        };
+        let id = unsafe { ::register(signal, action) }?;
+        lock[signal as usize] = Some(id);
+        Ok(())
     }
 
     /// Reads data from the internal self-pipe.
@@ -202,7 +249,7 @@ impl Signals {
     pub fn pending(&self) -> Pending {
         self.flush(false);
 
-        Pending(self.waker.pending.iter())
+        Pending(self.waker.pending.iter().enumerate())
     }
 
     /// Waits for some signals to be available and returns an iterator.
@@ -217,7 +264,7 @@ impl Signals {
     pub fn wait(&self) -> Pending {
         self.flush(true);
 
-        Pending(self.waker.pending.iter())
+        Pending(self.waker.pending.iter().enumerate())
     }
 
     /// Returns an infinite iterator over arriving signals.
@@ -262,14 +309,6 @@ impl Signals {
     }
 }
 
-impl Drop for Signals {
-    fn drop(&mut self) {
-        for id in &self.ids {
-            ::unregister(*id);
-        }
-    }
-}
-
 impl<'a> IntoIterator for &'a Signals {
     type Item = c_int;
     type IntoIter = Forever<'a>;
@@ -282,15 +321,18 @@ impl<'a> IntoIterator for &'a Signals {
 ///
 /// This is returned by the [`pending`](struct.Signals.html#method.pending) and
 /// [`wait`](struct.Signals.html#method.wait) methods.
-pub struct Pending<'a>(Iter<'a, c_int, AtomicBool>);
+pub struct Pending<'a>(Enumerate<Iter<'a, AtomicBool>>);
 
 impl<'a> Iterator for Pending<'a> {
     type Item = c_int;
 
     fn next(&mut self) -> Option<c_int> {
         while let Some((sig, flag)) = self.0.next() {
-            if flag.swap(false, Ordering::SeqCst) {
-                return Some(*sig);
+            if flag
+                .compare_exchange(true, false, Ordering::SeqCst, Ordering::Relaxed)
+                .is_ok()
+            {
+                return Some(sig as c_int);
             }
         }
 
@@ -392,7 +434,7 @@ mod tokio_support {
 
     use futures::stream::Stream;
     use futures::{Async as AsyncResult, Poll};
-    use libc;
+    use libc::{self, c_int};
     use tokio_reactor::{Handle, Registration};
 
     use super::Signals;
@@ -450,17 +492,15 @@ mod tokio_support {
                     self.position = 0;
                 }
                 assert!(self.position < self.inner.waker.pending.len());
-                // This is probably better than it looks like. There's like 32 signals on a
-                // reasonable system and we are not going to have registered all of them, so this
-                // linear scan is probably OK.
-                //
-                // We still could optimise, though, by keeping an iterator around between the loops
-                // when searching here… some other time, though.
-                let sig = self.inner.waker.pending.iter().nth(self.position).unwrap();
+                let sig = &self.inner.waker.pending[self.position];
+                let sig_num = self.position;
                 self.position += 1;
-                if sig.1.swap(false, Ordering::SeqCst) {
+                if sig
+                    .compare_exchange(true, false, Ordering::SeqCst, Ordering::Relaxed)
+                    .is_ok()
+                {
                     // Successfully claimed a signal, return it
-                    return Ok(AsyncResult::Ready(Some(*sig.0)));
+                    return Ok(AsyncResult::Ready(Some(sig_num as c_int)));
                 }
             }
         }
