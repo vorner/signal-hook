@@ -72,8 +72,16 @@ const MAX_SIGNUM: usize = 128;
 #[derive(Debug)]
 struct Waker {
     pending: Vec<AtomicBool>,
+    closed: AtomicBool,
     read: UnixStream,
     write: UnixStream,
+}
+
+impl Waker {
+    /// Sends a wakeup signal to the internal wakeup pipe.
+    fn wake(&self) {
+        pipe::wake(self.write.as_raw_fd());
+    }
 }
 
 #[derive(Debug)]
@@ -162,6 +170,7 @@ impl Signals {
         let pending = (0..MAX_SIGNUM).map(|_| AtomicBool::new(false)).collect();
         let waker = Arc::new(Waker {
             pending,
+            closed: AtomicBool::new(false),
             read,
             write,
         });
@@ -208,7 +217,7 @@ impl Signals {
         let waker = Arc::clone(&self.waker);
         let action = move || {
             waker.pending[signal as usize].store(true, Ordering::SeqCst);
-            pipe::wake(waker.write.as_raw_fd());
+            waker.wake();
         };
         let id = unsafe { ::register(signal, action) }?;
         lock[signal as usize] = Some(id);
@@ -221,6 +230,10 @@ impl Signals {
     ///
     /// Returns weather it successfully read something.
     fn flush(&self, wait: bool) -> bool {
+        // Just an optimisation.. would work without it too.
+        if self.waker.closed.load(Ordering::SeqCst) {
+            return false;
+        }
         const SIZE: usize = 1024;
         let mut buff = [0u8; SIZE];
         let res = unsafe {
@@ -234,6 +247,13 @@ impl Signals {
                 if wait { 0 } else { libc::MSG_DONTWAIT },
             )
         };
+
+        if self.waker.closed.load(Ordering::SeqCst) {
+            // Wake any other sleeping ends
+            // (if none wait, it'll only leave garbage inside the pipe, but we'll close it soon
+            // anyway).
+            self.waker.wake();
+        }
         res > 0
     }
 
@@ -276,6 +296,8 @@ impl Signals {
     ///
     /// This is also the iterator returned by `IntoIterator` implementation on `&Signals`.
     ///
+    /// This iterator terminates only if the [`Signals`] is explicitly [closed][Signals::close].
+    ///
     /// # Examples
     ///
     /// ```rust
@@ -306,6 +328,53 @@ impl Signals {
             signals: self,
             iter: self.pending(),
         }
+    }
+
+    /// Is it closed?
+    ///
+    /// See [`close`][Signals::close].
+    pub fn is_closed(&self) -> bool {
+        self.waker.closed.load(Ordering::SeqCst)
+    }
+
+    /// Closes the instance.
+    ///
+    /// This is meant to signalize termination through all the interrelated instances ‒ the ones
+    /// created by cloning the same original [`Signals`] instance (and all the [`Async`] ones
+    /// created from them). After calling close:
+    ///
+    /// * [`is_closed`][Signals::is_closed] will return true.
+    /// * All currently blocking operations on all threads and all the instances are interrupted
+    ///   and terminate.
+    /// * Any further operations will never block.
+    /// * Further signals may or may not be returned from the iterators. However, if any are
+    ///   returned, these are real signals that happened.
+    /// * The [`forever`][Signals::forever] terminates (follows from the above).
+    ///
+    /// The goal is to be able to shut down any background thread that handles only the signals.
+    ///
+    /// ```rust
+    /// # use signal_hook::iterator::Signals;
+    /// # use signal_hook::SIGUSR1;
+    /// # fn main() -> Result<(), Box<std::error::Error>> {
+    /// let signals = Signals::new(&[SIGUSR1])?;
+    /// let signals_bg = signals.clone();
+    /// let thread = std::thread::spawn(move || {
+    ///     for signal in &signals_bg {
+    ///         // Whatever with the signal
+    /// #       let _ = signal;
+    ///     }
+    /// });
+    ///
+    /// signals.close();
+    ///
+    /// // The thread will terminate on its own now (the for cycle runs out of signals).
+    /// thread.join().expect("background thread panicked");
+    /// # Ok(()) }
+    /// ```
+    pub fn close(&self) {
+        self.waker.closed.store(true, Ordering::SeqCst);
+        self.waker.wake();
     }
 }
 
@@ -353,13 +422,15 @@ impl<'a> Iterator for Forever<'a> {
     type Item = c_int;
 
     fn next(&mut self) -> Option<c_int> {
-        loop {
+        while !self.signals.is_closed() {
             if let Some(result) = self.iter.next() {
                 return Some(result);
             }
 
             self.iter = self.signals.wait();
         }
+
+        None
     }
 }
 
@@ -480,7 +551,7 @@ mod tokio_support {
         type Item = libc::c_int;
         type Error = Error;
         fn poll(&mut self) -> Poll<Option<libc::c_int>, Self::Error> {
-            loop {
+            while !self.inner.is_closed() {
                 if self.position >= self.inner.waker.pending.len() {
                     if self.registration.poll_read_ready()?.is_not_ready() {
                         return Ok(AsyncResult::NotReady);
@@ -503,6 +574,7 @@ mod tokio_support {
                     return Ok(AsyncResult::Ready(Some(sig_num as c_int)));
                 }
             }
+            Ok(AsyncResult::Ready(None))
         }
     }
 
