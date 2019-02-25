@@ -1,3 +1,9 @@
+# 0.1.8
+
+* The `Signals` iterator can now be closed (from another instance or thread),
+  which can be used to shut down the thread handling signals from the main
+  thread.
+
 # 0.1.7
 
 * The `Signals` iterator allows adding signals after creation.
