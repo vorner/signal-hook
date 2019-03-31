@@ -38,7 +38,7 @@
 //!
 //! * They are not fully portable, therefore the library would have to contain *both* the
 //!   implementation using the basic routines and the fancy ones. As signal handling is not on the
-//!   hot path of moth programs, this would not bring any actual benefit.
+//!   hot path of most programs, this would not bring any actual benefit.
 //! * The other routines require that the given signal is masked in all application's threads. As
 //!   the signals are not masked by default and a new thread inherits the signal mask of its
 //!   parent, it is possible to guarantee such global mask by masking them before any threads
