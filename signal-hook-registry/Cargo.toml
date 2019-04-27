@@ -1,0 +1,22 @@
+[package]
+name = "signal-hook-registry"
+version = "0.1.0"
+authors = ["Michal 'vorner' Vaner <vorner@vorner.cz>"]
+description = "Backend crate for signal-hook"
+documentation = "https://docs.rs/signal-hook-registry"
+readme = "README.md"
+repository = "https://github.com/vorner/signal-hook"
+keywords = ["signal", "unix", "daemon"]
+license = "Apache-2.0/MIT"
+
+[badges]
+travis-ci = { repository = "vorner/signal-hook" }
+maintenance = { status = "actively-developed" }
+
+[dependencies]
+arc-swap = "~0.3.5"
+libc = "~0.2"
+
+[dev-dependencies]
+version-sync = "~0.5"
+signal-hook = { version = "~0.1", path = ".." }
