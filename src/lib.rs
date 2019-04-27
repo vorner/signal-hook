@@ -132,5 +132,10 @@ pub mod flag;
 pub mod iterator;
 pub mod pipe;
 
-// XXX: Refine this
-pub use signal_hook_registry::*;
+pub use libc::{
+    SIGABRT, SIGALRM, SIGBUS, SIGCHLD, SIGCONT, SIGFPE, SIGHUP, SIGILL, SIGINT, SIGIO, SIGKILL,
+    SIGPIPE, SIGPROF, SIGQUIT, SIGSEGV, SIGSTOP, SIGSYS, SIGTERM, SIGTRAP, SIGUSR1, SIGUSR2,
+    SIGWINCH,
+};
+
+pub use signal_hook_registry::{register, unregister, SigId, FORBIDDEN};

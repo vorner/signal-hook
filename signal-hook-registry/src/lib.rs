@@ -4,7 +4,39 @@
 )]
 #![deny(missing_docs)]
 
-//! XXX: Docs
+//! Backend of the [signal-hook] crate.
+//!
+//! The [signal-hook] crate tries to provide an API to the unix signals, which are a global
+//! resource. Therefore, it is desirable an application contains just one version of the crate
+//! which manages this global resource. But that makes it impossible to make breaking changes in
+//! the API.
+//!
+//! Therefore, this crate provides very minimal and low level API to the signals that is unlikely
+//! to have to change, while there may be multiple versions of the [signal-hook] that all use this
+//! low-level API to provide different versions of the high level APIs.
+//!
+//! It is also possible some other crates might want to build a completely different API. This
+//! split allows these crates to still reuse the same low-level routines in this crate instead of
+//! going to the (much more dangerous) unix calls.
+//!
+//! # What this crate provides
+//!
+//! The only thing this crate does is multiplexing the signals. An application or library can add
+//! or remove callbacks and have multiple callbacks for the same signal.
+//!
+//! It handles dispatching the callbacks and managing them in a way that uses only the
+//! [async-signal-safe] functions inside the signal handler. Note that the callbacks are still run
+//! inside the signal handler, so it is up to the caller to ensure they are also
+//! [async-signal-safe].
+//!
+//! # What this is for
+//!
+//! This is a building block for other libraries creating reasonable abstractions on top of
+//! signals. The [signal-hook] is the generally preferred way if you need to handle signals in your
+//! application and provides several safe patterns of doing so.
+//!
+//! [signal-hook]: https://docs.rs/signal-hook
+//! [async-signal-safe]: http://www.man7.org/linux/man-pages/man7/signal-safety.7.html
 
 extern crate arc_swap;
 extern crate libc;
@@ -19,6 +51,8 @@ use std::sync::{Arc, Mutex, MutexGuard, Once, ONCE_INIT};
 use arc_swap::IndependentArcSwap;
 use libc::{c_int, c_void, sigaction, siginfo_t, sigset_t, SIG_BLOCK, SIG_SETMASK};
 
+use libc::{SIGFPE, SIGILL, SIGKILL, SIGSEGV, SIGSTOP};
+
 // # Internal workings
 //
 // This uses a form of RCU. There's an atomic pointer to the current action descriptors (in the
@@ -31,12 +65,6 @@ use libc::{c_int, c_void, sigaction, siginfo_t, sigset_t, SIG_BLOCK, SIG_SETMASK
 // deallocations inside the signal handler, after replacing the pointer, the modification routine
 // needs to busy-wait for the reference count on the old pointer to drop to 1 and take ownership ‒
 // that way the one deallocating is the modification routine, outside of the signal handler.
-
-pub use libc::{
-    SIGABRT, SIGALRM, SIGBUS, SIGCHLD, SIGCONT, SIGFPE, SIGHUP, SIGILL, SIGINT, SIGIO, SIGKILL,
-    SIGPIPE, SIGPROF, SIGQUIT, SIGSEGV, SIGSTOP, SIGSYS, SIGTERM, SIGTRAP, SIGUSR1, SIGUSR2,
-    SIGWINCH,
-};
 
 #[derive(Copy, Clone, Debug, Eq, PartialEq, Ord, PartialOrd, Hash)]
 struct ActionId(u64);
@@ -352,6 +380,8 @@ pub fn unregister(id: SigId) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    use libc::SIGUSR1;
 
     #[test]
     #[should_panic]
