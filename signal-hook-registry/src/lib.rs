@@ -79,7 +79,7 @@ pub struct SigId {
     action: ActionId,
 }
 
-type Action = Fn() + Send + Sync;
+type Action = dyn Fn(&siginfo_t) + Send + Sync;
 
 #[derive(Clone)]
 struct Slot {
@@ -181,8 +181,10 @@ extern "C" fn handler(sig: c_int, info: *mut siginfo_t, data: *mut c_void) {
             }
         }
 
+        let info = unsafe { info.as_ref().unwrap() };
+
         for action in slot.actions.values() {
-            action();
+            action(info);
         }
     }
 }
@@ -317,11 +319,39 @@ pub unsafe fn register<F>(signal: c_int, action: F) -> Result<SigId, Error>
 where
     F: Fn() + Sync + Send + 'static,
 {
+    register_sigaction(signal, move |_: &_| action())
+}
+
+/// Register a signal action.
+///
+/// This acts in the same way as [`register`], including the drawbacks, panics and performance
+/// characteristics. The only difference is the provided action accepts a [`siginfo_t`] argument,
+/// providing information about the received signal.
+pub unsafe fn register_sigaction<F>(signal: c_int, action: F) -> Result<SigId, Error>
+where
+    F: Fn(&siginfo_t) + Sync + Send + 'static,
+{
     assert!(
         !FORBIDDEN.contains(&signal),
         "Attempted to register forbidden signal {}",
         signal,
     );
+    register_unchecked(signal, action)
+}
+
+/// Register a signal action without checking for forbidden signals.
+///
+/// This acts the same way as [`register_sigaction`], but without checking for the [`FORBIDDEN`]
+/// signals. All the signal passed are registered and it is up to the caller to make some sense of
+/// them.
+///
+/// Note that you really need to know what you're doing if you change eg. the `SIGSEGV` signal
+/// handler. Generally, you don't want to do that. But unlike the other functions here, this
+/// function still allows you to do it.
+pub unsafe fn register_unchecked<F>(signal: c_int, action: F) -> Result<SigId, Error>
+where
+    F: Fn(&siginfo_t) + Sync + Send + 'static,
+{
     let globals = GlobalData::ensure();
     let (mut signals, mut lock) = globals.load();
     let id = ActionId(*lock);
@@ -387,6 +417,12 @@ mod tests {
     #[should_panic]
     fn panic_forbidden() {
         let _ = unsafe { register(SIGKILL, || ()) };
+    }
+
+    /// Registering the forbidden signals is allowed in the _unchecked version.
+    #[test]
+    fn forbidden_raw() {
+        unsafe { register_unchecked(SIGFPE, |_| std::process::abort()).unwrap() };
     }
 
     /// Check that registration works as expected and that unregister tells if it did or not.
