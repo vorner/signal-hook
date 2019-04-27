@@ -608,7 +608,7 @@ mod tokio_support {
         /// }
         /// ```
         pub fn into_async(self) -> Result<Async, Error> {
-            Async::new(self, &Handle::current())
+            Async::new(self, &Handle::default())
         }
 
         /// Turns the iterator into a stream, tied into a specific tokio reactor.
