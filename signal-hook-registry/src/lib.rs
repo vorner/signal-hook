@@ -79,7 +79,7 @@ pub struct SigId {
     action: ActionId,
 }
 
-type Action = dyn Fn(&siginfo_t) + Send + Sync;
+type Action = Fn(&siginfo_t) + Send + Sync;
 
 #[derive(Clone)]
 struct Slot {
