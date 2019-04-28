@@ -1,3 +1,5 @@
+* Split into backend signal-hook-registry and the frontend.
+
 # 0.1.8
 
 * The `Signals` iterator can now be closed (from another instance or thread),

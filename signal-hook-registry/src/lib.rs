@@ -1,5 +1,5 @@
 #![doc(
-    html_root_url = "https://docs.rs/signal-hook-registry/0.1.0/signal-hook-registry/",
+    html_root_url = "https://docs.rs/signal-hook-registry/1.0.0/signal-hook-registry/",
     test(attr(deny(warnings)))
 )]
 #![deny(missing_docs)]
@@ -34,6 +34,12 @@
 //! This is a building block for other libraries creating reasonable abstractions on top of
 //! signals. The [signal-hook] is the generally preferred way if you need to handle signals in your
 //! application and provides several safe patterns of doing so.
+//!
+//! # Rust version compatibility
+//!
+//! Currently builds on 1.26.0 an newer and this is very unlikely to change. However, tests
+//! require dependencies that don't build there, so tests need newer Rust version (they are run on
+//! stable).
 //!
 //! [signal-hook]: https://docs.rs/signal-hook
 //! [async-signal-safe]: http://www.man7.org/linux/man-pages/man7/signal-safety.7.html
@@ -243,7 +249,7 @@ pub const FORBIDDEN: &[c_int] = &[SIGKILL, SIGSTOP, SIGILL, SIGFPE, SIGSEGV];
 ///
 /// # Panics
 ///
-/// If the signal is one of:
+/// If the signal is one of (see [`FORBIDDEN`]):
 ///
 /// * `SIGKILL`
 /// * `SIGSTOP`
@@ -252,10 +258,10 @@ pub const FORBIDDEN: &[c_int] = &[SIGKILL, SIGSTOP, SIGILL, SIGFPE, SIGSEGV];
 /// * `SIGSEGV`
 ///
 /// The first two are not possible to override (and the underlying C functions simply ignore all
-/// requests to do so, which smells of possible bugs). The rest can be set, but generally needs
-/// very special handling to do so correctly (direct manipulation of the application's address
-/// space, `longjmp` and similar). Unless you know very well what you're doing, you'll shoot
-/// yourself into the foot and this library won't help you with that.
+/// requests to do so, which smells of possible bugs, or return errors). The rest can be set, but
+/// generally needs very special handling to do so correctly (direct manipulation of the
+/// application's address space, `longjmp` and similar). Unless you know very well what you're
+/// doing, you'll shoot yourself into the foot and this library won't help you with that.
 ///
 /// # Errors
 ///
@@ -264,7 +270,8 @@ pub const FORBIDDEN: &[c_int] = &[SIGKILL, SIGSTOP, SIGILL, SIGFPE, SIGSEGV];
 /// given platform ‒ ofter a program is debugged and tested on a given OS, it should never return
 /// an error.
 ///
-/// However, if an error *is* returned, there are no guarantees if the given action was registered.
+/// However, if an error *is* returned, there are no guarantees if the given action was registered
+/// or not.
 ///
 /// # Unsafety
 ///
