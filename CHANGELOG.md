@@ -1,4 +1,9 @@
-* Split into backend signal-hook-registry and the frontend.
+# 0.1.9
+# registry-1.0.0
+
+* Split into backend signal-hook-registry and the frontend. The backend is much
+  less likely to have breaking changes so it contains the things that can be in
+  the application just once.
 
 # 0.1.8
 
