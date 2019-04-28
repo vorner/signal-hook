@@ -409,9 +409,14 @@ pub fn unregister(id: SigId) -> bool {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
+    use std::sync::atomic::{AtomicUsize, Ordering};
+    use std::sync::Arc;
+    use std::thread;
+    use std::time::Duration;
 
-    use libc::SIGUSR1;
+    use libc::{pid_t, SIGUSR1, SIGUSR2};
+
+    use super::*;
 
     #[test]
     #[should_panic]
@@ -423,6 +428,51 @@ mod tests {
     #[test]
     fn forbidden_raw() {
         unsafe { register_unchecked(SIGFPE, |_| std::process::abort()).unwrap() };
+    }
+
+    #[test]
+    fn signal_with_pid() {
+        let status = Arc::new(AtomicUsize::new(0));
+        let action = {
+            let status = Arc::clone(&status);
+            move |siginfo: &siginfo_t| {
+                // Hack: currently, libc exposes only the first 3 fields of siginfo_t. The pid
+                // comes somewhat later on. Therefore, we do a Really Ugly Hack and define our
+                // own structure (and hope it is correct on all platforms). But hey, this is
+                // only the tests, so we are going to get away with this.
+                #[repr(C)]
+                struct SigInfo {
+                    _fields: [c_int; 3],
+                    #[cfg(all(target_pointer_width = "64", target_os = "linux"))]
+                    _pad: c_int,
+                    pid: pid_t,
+                }
+                let s: &SigInfo = unsafe {
+                    (siginfo as *const _ as usize as *const SigInfo)
+                        .as_ref()
+                        .unwrap()
+                };
+                status.store(s.pid as usize, Ordering::Relaxed);
+            }
+        };
+        let pid;
+        unsafe {
+            pid = libc::getpid();
+            register_sigaction(SIGUSR2, action).unwrap();
+            libc::kill(pid, SIGUSR2);
+        }
+        for _ in 0..10 {
+            thread::sleep(Duration::from_millis(100));
+            let current = status.load(Ordering::Relaxed);
+            match current {
+                // Not yet (PID == 0 doesn't happen)
+                0 => continue,
+                // Good, we are done with the correct result
+                _ if current == pid as usize => return,
+                _ => panic!("Wrong status value {}", current),
+            }
+        }
+        panic!("Timed out waiting for the signal");
     }
 
     /// Check that registration works as expected and that unregister tells if it did or not.
