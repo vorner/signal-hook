@@ -1,3 +1,7 @@
+# registry-1.0.1
+
+* Include the registry files in the crates.io tarball.
+
 # 0.1.9
 # registry-1.0.0
 
