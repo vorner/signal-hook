@@ -2,7 +2,7 @@
     html_root_url = "https://docs.rs/signal-hook-registry/1.0.1/signal-hook-registry/",
     test(attr(deny(warnings)))
 )]
-#![deny(missing_docs)]
+#![deny(missing_docs, warnings)]
 
 //! Backend of the [signal-hook] crate.
 //!
@@ -85,6 +85,9 @@ pub struct SigId {
     action: ActionId,
 }
 
+// This should be dyn Fn(...), but we want to support Rust 1.26.0 and that one doesn't allow them
+// yet.
+#[allow(unknown_lints, bare_trait_objects)]
 type Action = Fn(&siginfo_t) + Send + Sync;
 
 #[derive(Clone)]

@@ -15,7 +15,7 @@ fn signals_close_forever() {
     let signals = Signals::new(&[SIGUSR1]).unwrap();
     // Detect early terminations.
     let stopped = Arc::new(AtomicBool::new(false));
-    let threads = (0..5).into_iter().map(|_| {
+    let threads = (0..5).map(|_| {
         let signals_bg = signals.clone();
         let stopped_bg = Arc::clone(&stopped);
         thread::spawn(move || {
