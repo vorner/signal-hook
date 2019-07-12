@@ -356,7 +356,7 @@ impl Signals {
     /// ```rust
     /// # use signal_hook::iterator::Signals;
     /// # use signal_hook::SIGUSR1;
-    /// # fn main() -> Result<(), Box<std::error::Error>> {
+    /// # fn main() -> Result<(), std::io::Error> {
     /// let signals = Signals::new(&[SIGUSR1])?;
     /// let signals_bg = signals.clone();
     /// let thread = std::thread::spawn(move || {

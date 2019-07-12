@@ -15,7 +15,7 @@
 //! If you want to integrate with some asynchronous library, plugging streams from `mio-uds` or
 //! `tokio-uds` libraries should work.
 //!
-//! If it looks too low-level for your needs, the [`iterator`](iterator/) module contains some
+//! If it looks too low-level for your needs, the [`iterator`](../iterator/) module contains some
 //! higher-lever interface that also uses a self-pipe pattern under the hood.
 //!
 //! # Correct order of handling

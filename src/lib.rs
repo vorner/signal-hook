@@ -3,7 +3,9 @@
     test(attr(deny(warnings))),
     test(attr(allow(bare_trait_objects, unknown_lints)))
 )]
-#![deny(missing_docs)]
+#![deny(missing_docs, warnings)]
+// Don't fail on links to things not enabled in features
+#![allow(unknown_lints, intra_doc_link_resolution_failure)]
 
 //! Library for easier and safe Unix signal handling
 //!
