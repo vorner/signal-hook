@@ -26,7 +26,8 @@ mod tests {
             .map_err(|e| panic!("{}", e))
             .for_each(|sig| {
                 assert_eq!(sig, signal_hook::SIGUSR1);
-                Ok(send_sig(signal_hook::SIGUSR1))
+                send_sig(signal_hook::SIGUSR1);
+                Ok(())
             });
         send_sig(signal_hook::SIGUSR1);
         tokio::run(signals);
@@ -51,7 +52,10 @@ mod tests {
             });
         let senders = Interval::new(Instant::now(), Duration::from_millis(250))
             .map_err(|e| panic!("{}", e))
-            .for_each(|_| Ok(send_sig(signal_hook::SIGUSR2)));
+            .for_each(|_| {
+                send_sig(signal_hook::SIGUSR2);
+                Ok(())
+            });
         let both = signals.select(senders).map(|_| ()).map_err(|_| ());
         tokio::run(both);
         // Just make sure it didn't terminate prematurely

@@ -3,6 +3,7 @@
     test(attr(deny(warnings)))
 )]
 #![deny(missing_docs)]
+#![allow(unknown_lints, bare_trait_objects)]
 
 //! Backend of the [signal-hook] crate.
 //!
@@ -52,7 +53,11 @@ use std::collections::{BTreeMap, HashMap};
 use std::io::Error;
 use std::mem;
 use std::ptr;
-use std::sync::{Arc, Mutex, MutexGuard, Once, ONCE_INIT};
+// Once::new is now a const-fn. But it is not stable in all the rustc versions we want to support
+// yet.
+#[allow(deprecated)]
+use std::sync::ONCE_INIT;
+use std::sync::{Arc, Mutex, MutexGuard, Once};
 
 use arc_swap::IndependentArcSwap;
 use libc::{c_int, c_void, sigaction, siginfo_t, sigset_t, SIG_BLOCK, SIG_SETMASK};
@@ -130,6 +135,7 @@ struct GlobalData {
 }
 
 static mut GLOBAL_DATA: Option<GlobalData> = None;
+#[allow(deprecated)]
 static GLOBAL_INIT: Once = ONCE_INIT;
 
 impl GlobalData {
@@ -197,9 +203,14 @@ extern "C" fn handler(sig: c_int, info: *mut siginfo_t, data: *mut c_void) {
 
 fn block_signal(signal: c_int) -> Result<sigset_t, Error> {
     unsafe {
+        // The mem::unitialized is deprecated because it is hard to use correctly in Rust. But
+        // MaybeUninit is new and not supported by all the rustc's we want to support. Furthermore,
+        // sigset_t is a C type anyway and rust limitations should not apply to it, right?
+        #[allow(deprecated)]
         let mut newsigs: sigset_t = mem::uninitialized();
         libc::sigemptyset(&mut newsigs);
         libc::sigaddset(&mut newsigs, signal);
+        #[allow(deprecated)]
         let mut oldsigs: sigset_t = mem::uninitialized();
         libc::sigemptyset(&mut oldsigs);
         if libc::sigprocmask(SIG_BLOCK, &newsigs, &mut oldsigs) == 0 {
