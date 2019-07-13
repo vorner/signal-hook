@@ -53,15 +53,12 @@ use std::borrow::Borrow;
 use std::io::Error;
 use std::iter::Enumerate;
 use std::os::unix::io::AsRawFd;
-#[cfg(not(feature = "mio-support"))]
 use std::os::unix::net::UnixStream;
 use std::slice::Iter;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
 
 use libc::{self, c_int};
-#[cfg(feature = "mio-support")]
-use mio_uds::UnixStream;
 
 use pipe;
 use SigId;
@@ -437,8 +434,10 @@ impl<'a> Iterator for Forever<'a> {
 #[cfg(feature = "mio-support")]
 mod mio_support {
     use std::io::Error;
+    use std::os::unix::io::AsRawFd;
 
     use mio::event::Evented;
+    use mio::unix::EventedFd;
     use mio::{Poll, PollOpt, Ready, Token};
 
     use super::Signals;
@@ -451,7 +450,7 @@ mod mio_support {
             interest: Ready,
             opts: PollOpt,
         ) -> Result<(), Error> {
-            self.waker.read.register(poll, token, interest, opts)
+            EventedFd(&self.waker.read.as_raw_fd()).register(poll, token, interest, opts)
         }
 
         fn reregister(
@@ -461,11 +460,11 @@ mod mio_support {
             interest: Ready,
             opts: PollOpt,
         ) -> Result<(), Error> {
-            self.waker.read.reregister(poll, token, interest, opts)
+            EventedFd(&self.waker.read.as_raw_fd()).reregister(poll, token, interest, opts)
         }
 
         fn deregister(&self, poll: &Poll) -> Result<(), Error> {
-            self.waker.read.deregister(poll)
+            EventedFd(&self.waker.read.as_raw_fd()).deregister(poll)
         }
     }
 
