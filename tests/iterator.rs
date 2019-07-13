@@ -1,12 +1,13 @@
 extern crate signal_hook;
 
 use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::mpsc::{self, RecvTimeoutError};
 use std::sync::Arc;
 use std::thread;
 use std::time::Duration;
 
 use signal_hook::iterator::Signals;
-use signal_hook::SIGUSR1;
+use signal_hook::{SIGUSR1, SIGUSR2};
 
 #[test]
 fn signals_close_forever() {
@@ -38,4 +39,29 @@ fn signals_close_forever() {
     for thread in threads {
         thread.join().unwrap();
     }
+}
+
+// A reproducer for #16: if we had the mio-support enabled (which is enabled also by the
+// tokio-support feature), blocking no longer works. The .wait() would return immediately (an empty
+// iterator, possibly), .forever() would do a busy loop.
+// flag)
+#[test]
+fn signals_block_wait() {
+    let signals = Signals::new(&[SIGUSR2]).unwrap();
+    let (s, r) = mpsc::channel();
+    thread::spawn(move || {
+        // Technically, it may spuriously return early. But it shouldn't be doing it too much, so
+        // we just try to wait multiple times ‒ if they *all* return right away, it is broken.
+        for _ in 0..10 {
+            for _ in signals.wait() {
+                panic!("Someone really did send us SIGUSR2, which breaks the test");
+            }
+        }
+        let _ = s.send(());
+    });
+
+    let err = r
+        .recv_timeout(Duration::from_millis(100))
+        .expect_err("Wait didn't wait properly");
+    assert_eq!(err, RecvTimeoutError::Timeout);
 }

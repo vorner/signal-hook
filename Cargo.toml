@@ -14,7 +14,7 @@ travis-ci = { repository = "vorner/signal-hook" }
 maintenance = { status = "actively-developed" }
 
 [features]
-mio-support = ["mio", "mio-uds"]
+mio-support = ["mio"]
 tokio-support = ["futures", "mio-support", "tokio-reactor"]
 
 [workspace]
@@ -27,7 +27,6 @@ members = [
 libc = "~0.2"
 futures = { version = "~0.1", optional = true }
 mio = { version = "~0.6", optional = true }
-mio-uds = { version = "~0.6", optional = true }
 signal-hook-registry = { version = "~1", path = "signal-hook-registry" }
 tokio-reactor = { version = "~0.1", optional = true }
 
@@ -36,4 +35,4 @@ version-sync = "~0.8"
 tokio = "~0.1"
 
 [package.metadata.docs.rs]
-features = ["mio-support", "tokio-support"]
+all-features = true
