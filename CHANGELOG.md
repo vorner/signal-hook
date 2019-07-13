@@ -1,3 +1,8 @@
+# 0.1.10
+
+* Fix busy loop in Iterator::forever when the mio-support feature is enabled
+  (#16).
+
 # registry-1.0.1
 
 * Include the registry files in the crates.io tarball.
