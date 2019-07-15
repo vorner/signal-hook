@@ -1,3 +1,5 @@
+#![allow(unknown_lints, bare_trait_objects)]
+
 //! Signal emulation for Windows.
 
 use libc::c_int;
