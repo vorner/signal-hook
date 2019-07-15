@@ -85,6 +85,9 @@
 //!     signal_hook::flag::register(signal_hook::SIGUSR1, Arc::clone(&got))?;
 //!     unsafe {
 //!         let pid = libc::getpid();
+//! #       #[cfg(windows)]
+//! #       signal_hook::__emulate_kill(pid, signal_hook::SIGUSR1);
+//! #       #[cfg(not(windows))]
 //!         libc::kill(pid, signal_hook::SIGUSR1);
 //!     }
 //!     // A sleep here, because it could run the signal handler in another thread and we may not
@@ -160,12 +163,17 @@ mod tests {
 
     use libc;
 
+    #[cfg(windows)]
+    use __emulate_kill as kill;
+    #[cfg(not(windows))]
+    use libc::kill;
+
     use super::*;
 
     fn self_signal() {
         unsafe {
             let pid = libc::getpid();
-            libc::kill(pid, ::SIGUSR1);
+            kill(pid, ::SIGUSR1);
         }
     }
 

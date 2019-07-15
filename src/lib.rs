@@ -128,15 +128,35 @@ extern crate mio;
 extern crate signal_hook_registry;
 #[cfg(feature = "tokio-support")]
 extern crate tokio_reactor;
+#[cfg(windows)]
+extern crate winapi;
 
 pub mod flag;
 pub mod iterator;
+#[cfg(not(windows))]
 pub mod pipe;
+#[cfg(windows)]
+pub mod pipe_windows;
+#[cfg(windows)]
+mod windows;
 
+#[cfg(not(windows))]
 pub use libc::{
     SIGABRT, SIGALRM, SIGBUS, SIGCHLD, SIGCONT, SIGFPE, SIGHUP, SIGILL, SIGINT, SIGIO, SIGKILL,
     SIGPIPE, SIGPROF, SIGQUIT, SIGSEGV, SIGSTOP, SIGSYS, SIGTERM, SIGTRAP, SIGUSR1, SIGUSR2,
     SIGWINCH,
 };
 
+#[cfg(not(windows))]
 pub use signal_hook_registry::{register, unregister, SigId, FORBIDDEN};
+
+#[cfg(windows)]
+pub use windows::{
+    register, unregister, SigId, FORBIDDEN, SIGABRT, SIGALRM, SIGBUS, SIGCHLD, SIGCONT, SIGFPE,
+    SIGHUP, SIGILL, SIGINT, SIGIO, SIGKILL, SIGPIPE, SIGPROF, SIGQUIT, SIGSEGV, SIGSTOP, SIGSYS,
+    SIGTERM, SIGTRAP, SIGUSR1, SIGUSR2, SIGWINCH,
+};
+
+#[cfg(windows)]
+#[doc(hidden)]
+pub use windows::__emulate_kill;

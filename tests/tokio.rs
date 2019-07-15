@@ -12,8 +12,13 @@ mod tests {
     use self::tokio::prelude::*;
     use self::tokio::timer::Interval;
 
+    #[cfg(not(windows))]
+    use self::libc::kill;
+    #[cfg(windows)]
+    use self::signal_hook::__emulate_kill as kill;
+
     fn send_sig(sig: libc::c_int) {
-        unsafe { libc::kill(libc::getpid(), sig) };
+        unsafe { kill(libc::getpid(), sig) };
     }
 
     #[test]

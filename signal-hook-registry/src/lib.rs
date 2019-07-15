@@ -4,6 +4,7 @@
 )]
 #![deny(missing_docs, warnings)]
 #![allow(unknown_lints, bare_trait_objects)]
+#![cfg(not(windows))]
 
 //! Backend of the [signal-hook] crate.
 //!

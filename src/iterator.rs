@@ -25,6 +25,9 @@
 //! #       signal_hook::SIGUSR1,
 //!     ])?;
 //! #   // A trick to terminate the example when run as doc-test. Not part of the real code.
+//! #   #[cfg(windows)]
+//! #   unsafe { signal_hook::__emulate_kill(libc::getpid(), signal_hook::SIGUSR1) };
+//! #   #[cfg(not(windows))]
 //! #   unsafe { libc::kill(libc::getpid(), signal_hook::SIGUSR1) };
 //!     'outer: loop {
 //!         // Pick up signals that arrived since last time
@@ -52,15 +55,12 @@
 use std::borrow::Borrow;
 use std::io::Error;
 use std::iter::Enumerate;
-use std::os::unix::io::AsRawFd;
-use std::os::unix::net::UnixStream;
 use std::slice::Iter;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
 
-use libc::{self, c_int};
+use libc::c_int;
 
-use pipe;
 use SigId;
 
 /// Maximal signal number we support.
@@ -70,14 +70,13 @@ const MAX_SIGNUM: usize = 128;
 struct Waker {
     pending: Vec<AtomicBool>,
     closed: AtomicBool,
-    read: UnixStream,
-    write: UnixStream,
+    inner: self::waker_impl::Waker,
 }
 
 impl Waker {
     /// Sends a wakeup signal to the internal wakeup pipe.
     fn wake(&self) {
-        pipe::wake(self.write.as_raw_fd());
+        self.inner.wake();
     }
 }
 
@@ -163,13 +162,12 @@ impl Signals {
         I: IntoIterator<Item = S>,
         S: Borrow<c_int>,
     {
-        let (read, write) = UnixStream::pair()?;
+        let inner = waker_impl::Waker::new()?;
         let pending = (0..MAX_SIGNUM).map(|_| AtomicBool::new(false)).collect();
         let waker = Arc::new(Waker {
             pending,
             closed: AtomicBool::new(false),
-            read,
-            write,
+            inner,
         });
         let ids = (0..MAX_SIGNUM).map(|_| None).collect();
         let me = Self {
@@ -231,19 +229,7 @@ impl Signals {
         if self.waker.closed.load(Ordering::SeqCst) {
             return false;
         }
-        const SIZE: usize = 1024;
-        let mut buff = [0u8; SIZE];
-        let res = unsafe {
-            // We ignore all errors on purpose. This should not be something like closed file
-            // descriptor. It could EAGAIN, but that's OK in case we say MSG_DONTWAIT. If it's
-            // EINTR, then it's OK too, it'll only create a spurious wakeup.
-            libc::recv(
-                self.waker.read.as_raw_fd(),
-                buff.as_mut_ptr() as *mut libc::c_void,
-                SIZE,
-                if wait { 0 } else { libc::MSG_DONTWAIT },
-            )
-        };
+        let res = self.waker.inner.flush(wait);
 
         if self.waker.closed.load(Ordering::SeqCst) {
             // Wake any other sleeping ends
@@ -251,7 +237,7 @@ impl Signals {
             // anyway).
             self.waker.wake();
         }
-        res > 0
+        res
     }
 
     /// Returns an iterator of already received signals.
@@ -431,13 +417,145 @@ impl<'a> Iterator for Forever<'a> {
     }
 }
 
+#[cfg(not(windows))]
+mod waker_impl {
+    use libc;
+    use std::io::Error;
+    use std::os::unix::io::AsRawFd;
+    use std::os::unix::io::RawFd;
+    use std::os::unix::net::UnixStream;
+
+    #[cfg(feature = "mio-support")]
+    use mio::unix::EventedFd;
+
+    use pipe;
+
+    #[derive(Debug)]
+    pub(super) struct Waker {
+        read: UnixStream,
+        write: UnixStream,
+        read_fd: RawFd,
+    }
+
+    impl Waker {
+        pub(super) fn new() -> Result<Self, Error> {
+            let (read, write) = UnixStream::pair()?;
+            let read_fd = read.as_raw_fd();
+            Ok(Self {
+                read,
+                write,
+                read_fd,
+            })
+        }
+
+        /// Sends a wakeup signal to the internal wakeup pipe.
+        pub(super) fn wake(&self) {
+            pipe::wake(self.write.as_raw_fd());
+        }
+
+        /// Reads data from the internal self-pipe.
+        ///
+        /// If `wait` is `true` and there are no data in the self pipe, it blocks until some come.
+        ///
+        /// Returns weather it successfully read something.
+        pub(super) fn flush(&self, wait: bool) -> bool {
+            const SIZE: usize = 1024;
+            let mut buff = [0u8; SIZE];
+            let res = unsafe {
+                // We ignore all errors on purpose. This should not be something like closed file
+                // descriptor. It could EAGAIN, but that's OK in case we say MSG_DONTWAIT. If it's
+                // EINTR, then it's OK too, it'll only create a spurious wakeup.
+                libc::recv(
+                    self.read.as_raw_fd(),
+                    buff.as_mut_ptr() as *mut libc::c_void,
+                    SIZE,
+                    if wait { 0 } else { libc::MSG_DONTWAIT },
+                )
+            };
+
+            res > 0
+        }
+
+        #[cfg(feature = "mio-support")]
+        pub(super) fn evented(&self) -> EventedFd {
+            EventedFd(&self.read_fd)
+        }
+    }
+}
+
+#[cfg(windows)]
+mod waker_impl {
+    // Unlike `sigaction`, `SetConsoleCtrlHandler` launches a separate thread for handlers.
+    // Therefore we don't need to be AS-safe and can just use an ordinary in-process synchronization primitives.
+
+    use std::io::Error;
+    use std::mem;
+    use std::sync::{Condvar, Mutex};
+
+    #[cfg(feature = "mio-support")]
+    use mio::{Ready, Registration, SetReadiness};
+
+    #[derive(Debug)]
+    pub(super) struct Waker {
+        waken: Mutex<bool>,
+        cond: Condvar,
+        #[cfg(feature = "mio-support")]
+        registration: Registration,
+        #[cfg(feature = "mio-support")]
+        set_readiness: SetReadiness,
+    }
+
+    impl Waker {
+        pub(super) fn new() -> Result<Self, Error> {
+            #[cfg(feature = "mio-support")]
+            let (registration, set_readiness) = Registration::new2();
+            Ok(Waker {
+                waken: Mutex::new(false),
+                cond: Condvar::new(),
+                #[cfg(feature = "mio-support")]
+                registration,
+                #[cfg(feature = "mio-support")]
+                set_readiness,
+            })
+        }
+
+        /// Sends a wakeup signal to the internal wakeup pipe.
+        pub(super) fn wake(&self) {
+            let mut waken = self.waken.lock().unwrap();
+            if *waken == false {
+                *waken = true;
+                self.cond.notify_one();
+            }
+            // How do we handle error in set_readiness?
+            #[cfg(feature = "mio-support")]
+            self.set_readiness.set_readiness(Ready::readable()).ok();
+        }
+
+        /// Reads data from the internal self-pipe.
+        ///
+        /// If `wait` is `true` and there are no data in the self pipe, it blocks until some come.
+        ///
+        /// Returns weather it successfully read something.
+        pub(super) fn flush(&self, wait: bool) -> bool {
+            let mut waken = self.waken.lock().unwrap();
+            while wait && !*waken {
+                waken = self.cond.wait(waken).unwrap();
+            }
+            mem::replace(&mut *waken, false)
+        }
+
+        #[cfg(feature = "mio-support")]
+        pub(super) fn evented(&self) -> &Registration {
+            &self.registration
+        }
+    }
+}
+
 #[cfg(feature = "mio-support")]
 mod mio_support {
     use std::io::Error;
-    use std::os::unix::io::AsRawFd;
 
     use mio::event::Evented;
-    use mio::unix::EventedFd;
     use mio::{Poll, PollOpt, Ready, Token};
 
     use super::Signals;
@@ -450,7 +568,10 @@ mod mio_support {
             interest: Ready,
             opts: PollOpt,
         ) -> Result<(), Error> {
-            EventedFd(&self.waker.read.as_raw_fd()).register(poll, token, interest, opts)
+            self.waker
+                .inner
+                .evented()
+                .register(poll, token, interest, opts)
         }
 
         fn reregister(
@@ -460,11 +581,16 @@ mod mio_support {
             interest: Ready,
             opts: PollOpt,
         ) -> Result<(), Error> {
-            EventedFd(&self.waker.read.as_raw_fd()).reregister(poll, token, interest, opts)
+            self.waker
+                .inner
+                .evented()
+                .reregister(poll, token, interest, opts)
         }
 
         fn deregister(&self, poll: &Poll) -> Result<(), Error> {
-            EventedFd(&self.waker.read.as_raw_fd()).deregister(poll)
+            // The inherent method is deprecated but the trait method isn't
+            #[cfg_attr(windows, allow(deprecated))]
+            self.waker.inner.evented().deregister(poll)
         }
     }
 
@@ -477,6 +603,11 @@ mod mio_support {
 
         use super::*;
 
+        #[cfg(windows)]
+        use __emulate_kill as kill;
+        #[cfg(not(windows))]
+        use libc::kill;
+
         #[test]
         fn mio_wakeup() {
             let signals = Signals::new(&[::SIGUSR1]).unwrap();
@@ -485,7 +616,7 @@ mod mio_support {
             poll.register(&signals, token, Ready::readable(), PollOpt::level())
                 .unwrap();
             let mut events = Events::with_capacity(10);
-            unsafe { libc::kill(libc::getpid(), ::SIGUSR1) };
+            unsafe { kill(libc::getpid(), ::SIGUSR1) };
             poll.poll(&mut events, Some(Duration::from_secs(10)))
                 .unwrap();
             let event = events.iter().next().unwrap();
@@ -601,6 +732,9 @@ mod tokio_support {
         ///         .into_future()
         ///         .map(|sig| assert_eq!(sig.0.unwrap(), signal_hook::SIGUSR1))
         ///         .map_err(|e| panic!("{}", e.0));
+        /// #   #[cfg(windows)]
+        /// #   unsafe { signal_hook::__emulate_kill(libc::getpid(), signal_hook::SIGUSR1) };
+        /// #   #[cfg(not(windows))]
         ///     unsafe { libc::kill(libc::getpid(), signal_hook::SIGUSR1) };
         ///     tokio::run(wait_signal);
         ///     Ok(())
