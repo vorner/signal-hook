@@ -102,7 +102,7 @@ impl GlobalData {
             *GLOBAL.0.get() = Some(GlobalData::new());
         });
 
-        if let &Some(ref data) = unsafe { &*GLOBAL.0.get() } {
+        if let Some(ref data) = *unsafe { &*GLOBAL.0.get() } {
             data
         } else {
             unreachable!();
@@ -265,7 +265,10 @@ where
         action: action_id,
     };
 
-    let all_signals = state.all_signals.entry(signal).or_insert(BTreeMap::new());
+    let all_signals = state
+        .all_signals
+        .entry(signal)
+        .or_insert_with(BTreeMap::new);
     all_signals.insert(action_id, Box::new(action));
 
     Ok(sig_id)

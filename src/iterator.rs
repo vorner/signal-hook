@@ -495,9 +495,18 @@ mod waker_impl {
     #[cfg(feature = "mio-support")]
     use mio::{Ready, Registration, SetReadiness};
 
+    use self::WakeState::*;
+
+    #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+    enum WakeState {
+        Waken,
+        NotWaken,
+    }
+
     #[derive(Debug)]
     pub(super) struct Waker {
-        waken: Mutex<bool>,
+        // No AtomicBool. We want to use it with Condvar.
+        waken: Mutex<WakeState>,
         cond: Condvar,
         #[cfg(feature = "mio-support")]
         registration: Registration,
@@ -510,7 +519,7 @@ mod waker_impl {
             #[cfg(feature = "mio-support")]
             let (registration, set_readiness) = Registration::new2();
             Ok(Waker {
-                waken: Mutex::new(false),
+                waken: Mutex::new(NotWaken),
                 cond: Condvar::new(),
                 #[cfg(feature = "mio-support")]
                 registration,
@@ -522,8 +531,8 @@ mod waker_impl {
         /// Sends a wakeup signal to the internal wakeup pipe.
         pub(super) fn wake(&self) {
             let mut waken = self.waken.lock().unwrap();
-            if *waken == false {
-                *waken = true;
+            if *waken == NotWaken {
+                *waken = Waken;
                 self.cond.notify_one();
             }
             // How do we handle error in set_readiness?
@@ -538,10 +547,10 @@ mod waker_impl {
         /// Returns weather it successfully read something.
         pub(super) fn flush(&self, wait: bool) -> bool {
             let mut waken = self.waken.lock().unwrap();
-            while wait && !*waken {
+            while wait && *waken == NotWaken {
                 waken = self.cond.wait(waken).unwrap();
             }
-            mem::replace(&mut *waken, false)
+            mem::replace(&mut *waken, NotWaken) == Waken
         }
 
         #[cfg(feature = "mio-support")]
