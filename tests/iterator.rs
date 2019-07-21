@@ -1,3 +1,5 @@
+#![cfg(not(windows))]
+
 extern crate signal_hook;
 
 use std::sync::atomic::{AtomicBool, Ordering};

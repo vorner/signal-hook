@@ -85,8 +85,20 @@
 //! It should work on any POSIX.1-2001 system, which are all the major big OSes with the notable
 //! exception of Windows.
 //!
-//! Windows has some limited support for signals, patches to include support in this library are
-//! welcome.
+//! This crate includes a limited support for Windows, based on `signal`/`raise` in the CRT.
+//! There are differences in both API and behavior:
+//!
+//! - `iterator` and `pipe` are not yet implemented.
+//! - We have only a few signals: `SIGABRT`, `SIGFPE`, `SIGILL`, `SIGINT`, `SIGSEGV` and `SIGTERM`.
+//!   - CRT headers also define `SIGABRT_COMPAT` and `SIGBREAK`,
+//!     but it's not exported from libc yet.
+//! - Due to lack of signal blocking, there's a race condition.
+//!   After the call to `signal`, there's a moment where we miss a signal.
+//!
+//! Moreover, signals won't work as you expected. `SIGTERM` isn't actually used and
+//! not all `Ctrl-C`s are turned into `SIGINT`.
+//!
+//! Patches to improve Windows support in this library are welcome.
 //!
 //! # Examples
 //!
@@ -130,13 +142,19 @@ extern crate signal_hook_registry;
 extern crate tokio_reactor;
 
 pub mod flag;
+#[cfg(not(windows))]
 pub mod iterator;
+#[cfg(not(windows))]
 pub mod pipe;
 
+#[cfg(not(windows))]
 pub use libc::{
     SIGABRT, SIGALRM, SIGBUS, SIGCHLD, SIGCONT, SIGFPE, SIGHUP, SIGILL, SIGINT, SIGIO, SIGKILL,
     SIGPIPE, SIGPROF, SIGQUIT, SIGSEGV, SIGSTOP, SIGSYS, SIGTERM, SIGTRAP, SIGUSR1, SIGUSR2,
     SIGWINCH,
 };
+
+#[cfg(windows)]
+pub use libc::{SIGABRT, SIGFPE, SIGILL, SIGINT, SIGSEGV, SIGTERM};
 
 pub use signal_hook_registry::{register, unregister, SigId, FORBIDDEN};

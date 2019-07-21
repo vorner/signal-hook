@@ -36,9 +36,11 @@
 //!     let term = Arc::new(AtomicUsize::new(0));
 //!     const SIGTERM: usize = signal_hook::SIGTERM as usize;
 //!     const SIGINT: usize = signal_hook::SIGINT as usize;
+//! #   #[cfg(not(windows))]
 //!     const SIGQUIT: usize = signal_hook::SIGQUIT as usize;
 //!     signal_flag::register_usize(signal_hook::SIGTERM, Arc::clone(&term), SIGTERM)?;
 //!     signal_flag::register_usize(signal_hook::SIGINT, Arc::clone(&term), SIGINT)?;
+//! #   #[cfg(not(windows))]
 //!     signal_flag::register_usize(signal_hook::SIGQUIT, Arc::clone(&term), SIGQUIT)?;
 //!
 //! #   // Hack to terminate the example when run as a doc-test.
@@ -56,6 +58,7 @@
 //!                 eprintln!("Terminating on the INT signal");
 //!                 break;
 //!             }
+//! #           #[cfg(not(windows))]
 //!             SIGQUIT => {
 //!                 eprintln!("Terminating on the QUIT signal");
 //!                 break;
@@ -82,10 +85,17 @@
 //!
 //! fn main() -> Result<(), Error> {
 //!     let got = Arc::new(AtomicBool::new(false));
+//! #   #[cfg(not(windows))]
 //!     signal_hook::flag::register(signal_hook::SIGUSR1, Arc::clone(&got))?;
+//! #   #[cfg(windows)]
+//! #   signal_hook::flag::register(signal_hook::SIGTERM, Arc::clone(&got))?;
 //!     unsafe {
+//! #       #[cfg(not(windows))]
 //!         let pid = libc::getpid();
+//! #       #[cfg(not(windows))]
 //!         libc::kill(pid, signal_hook::SIGUSR1);
+//! #       #[cfg(windows)]
+//! #       libc::raise(signal_hook::SIGTERM);
 //!     }
 //!     // A sleep here, because it could run the signal handler in another thread and we may not
 //!     // see the flag right away. This is still a hack and not guaranteed to work, it is just an
@@ -112,9 +122,11 @@
 //!     // We start with true, to load the configuration in the very first iteration too.
 //!     let reload = Arc::new(AtomicBool::new(true));
 //!     let term = Arc::new(AtomicBool::new(false));
+//! #   #[cfg(not(windows))]
 //!     signal_flag::register(signal_hook::SIGHUP, Arc::clone(&reload))?;
 //!     signal_flag::register(signal_hook::SIGINT, Arc::clone(&term))?;
 //!     signal_flag::register(signal_hook::SIGTERM, Arc::clone(&term))?;
+//! #   #[cfg(not(windows))]
 //!     signal_flag::register(signal_hook::SIGQUIT, Arc::clone(&term))?;
 //!     while !term.load(Ordering::Relaxed) {
 //!         // Using swap here, not load, to reset it back to false once it is reloaded.
@@ -164,8 +176,12 @@ mod tests {
 
     fn self_signal() {
         unsafe {
+            #[cfg(not(windows))]
             let pid = libc::getpid();
+            #[cfg(not(windows))]
             libc::kill(pid, ::SIGUSR1);
+            #[cfg(windows)]
+            libc::raise(::SIGTERM);
         }
     }
 
@@ -187,7 +203,10 @@ mod tests {
     fn register_unregister() {
         // When we register the action, it is active.
         let flag = Arc::new(AtomicBool::new(false));
+        #[cfg(not(windows))]
         let signal = register(::SIGUSR1, Arc::clone(&flag)).unwrap();
+        #[cfg(windows)]
+        let signal = register(::SIGTERM, Arc::clone(&flag)).unwrap();
         self_signal();
         assert!(wait_flag(&flag));
         // But stops working after it is unregistered.
