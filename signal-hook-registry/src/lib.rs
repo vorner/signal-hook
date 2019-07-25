@@ -50,6 +50,13 @@
 //! - Due to lack of `siginfo_t`, we don't provide `register_sigaction` or `register_unchecked`.
 //! - Due to lack of signal blocking, there's a race condition.
 //!   After the call to `signal`, there's a moment where we miss a signal.
+//!   That means when you register a handler, there may be a signal which invokes
+//!   neither the default handler or the handler you register.
+//! - Handlers registered by `signal` in Windows are cleared on first signal.
+//!   To match behavior in other platforms, we re-register the handler each time the handler is
+//!   called, but there's a moment where we miss a handler.
+//!   That means when you receive two signals in a row, there may be a signal which invokes
+//!   the default handler, nevertheless you certainly have registered the handler.
 //!
 //! [signal-hook]: https://docs.rs/signal-hook
 //! [async-signal-safe]: http://www.man7.org/linux/man-pages/man7/signal-safety.7.html
