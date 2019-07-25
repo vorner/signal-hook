@@ -91,9 +91,7 @@
 //! #   signal_hook::flag::register(signal_hook::SIGTERM, Arc::clone(&got))?;
 //!     unsafe {
 //! #       #[cfg(not(windows))]
-//!         let pid = libc::getpid();
-//! #       #[cfg(not(windows))]
-//!         libc::kill(pid, signal_hook::SIGUSR1);
+//!         libc::raise(signal_hook::SIGUSR1);
 //! #       #[cfg(windows)]
 //! #       libc::raise(signal_hook::SIGTERM);
 //!     }
@@ -177,9 +175,7 @@ mod tests {
     fn self_signal() {
         unsafe {
             #[cfg(not(windows))]
-            let pid = libc::getpid();
-            #[cfg(not(windows))]
-            libc::kill(pid, ::SIGUSR1);
+            libc::raise(::SIGUSR1);
             #[cfg(windows)]
             libc::raise(::SIGTERM);
         }

@@ -67,7 +67,7 @@
 //!     let (mut read, write) = UnixStream::pair()?;
 //!     signal_hook::pipe::register(signal_hook::SIGUSR1, write)?;
 //!     // This will write into the pipe write end through the signal handler
-//!     unsafe { libc::kill(libc::getpid(), signal_hook::SIGUSR1) };
+//!     unsafe { libc::raise(signal_hook::SIGUSR1) };
 //!     let mut buff = [0];
 //!     read.read_exact(&mut buff)?;
 //!     println!("Happily terminating");

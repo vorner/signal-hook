@@ -15,7 +15,7 @@ mod tests {
     use self::tokio::timer::Interval;
 
     fn send_sig(sig: libc::c_int) {
-        unsafe { libc::kill(libc::getpid(), sig) };
+        unsafe { libc::raise(sig) };
     }
 
     #[test]

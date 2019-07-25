@@ -649,7 +649,7 @@ mod tests {
         unsafe {
             pid = libc::getpid();
             register_sigaction(SIGUSR2, action).unwrap();
-            libc::kill(pid, SIGUSR2);
+            libc::raise(SIGUSR2);
         }
         for _ in 0..10 {
             thread::sleep(Duration::from_millis(100));
