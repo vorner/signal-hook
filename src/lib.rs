@@ -89,9 +89,8 @@
 //! There are differences in both API and behavior:
 //!
 //! - `iterator` and `pipe` are not yet implemented.
-//! - We have only a few signals: `SIGABRT`, `SIGFPE`, `SIGILL`, `SIGINT`, `SIGSEGV` and `SIGTERM`.
-//!   - CRT headers also define `SIGABRT_COMPAT` and `SIGBREAK`,
-//!     but it's not exported from libc yet.
+//! - We have only a few signals: `SIGABRT`, `SIGABRT_COMPAT`, `SIGBREAK`,
+//!   `SIGFPE`, `SIGILL`, `SIGINT`, `SIGSEGV` and `SIGTERM`.
 //! - Due to lack of signal blocking, there's a race condition.
 //!   After the call to `signal`, there's a moment where we miss a signal.
 //!   That means when you register a handler, there may be a signal which invokes
@@ -163,5 +162,13 @@ pub use libc::{
 
 #[cfg(windows)]
 pub use libc::{SIGABRT, SIGFPE, SIGILL, SIGINT, SIGSEGV, SIGTERM};
+
+// NOTE: they perhaps deserve backport to libc.
+#[cfg(windows)]
+/// Same as `SIGABRT`, but the number is compatible to other platforms.
+pub const SIGABRT_COMPAT: libc::c_int = 6;
+#[cfg(windows)]
+/// Ctrl-Break is pressed for Windows Console processes.
+pub const SIGBREAK: libc::c_int = 21;
 
 pub use signal_hook_registry::{register, unregister, SigId, FORBIDDEN};
