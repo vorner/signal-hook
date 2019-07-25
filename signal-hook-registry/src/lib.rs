@@ -341,12 +341,12 @@ fn without_signal<F: FnOnce() -> Result<(), Error>>(signal: c_int, f: F) -> Resu
 /// these signals is attempted.
 ///
 /// See [`register`](fn.register.html).
-pub const FORBIDDEN: &[c_int] = _FORBIDDEN;
+pub const FORBIDDEN: &[c_int] = FORBIDDEN_IMPL;
 
 #[cfg(windows)]
-const _FORBIDDEN: &[c_int] = &[SIGILL, SIGFPE, SIGSEGV];
+const FORBIDDEN_IMPL: &[c_int] = &[SIGILL, SIGFPE, SIGSEGV];
 #[cfg(not(windows))]
-const _FORBIDDEN: &[c_int] = &[SIGKILL, SIGSTOP, SIGILL, SIGFPE, SIGSEGV];
+const FORBIDDEN_IMPL: &[c_int] = &[SIGKILL, SIGSTOP, SIGILL, SIGFPE, SIGSEGV];
 
 /// Registers an arbitrary action for the given signal.
 ///
@@ -439,7 +439,7 @@ pub unsafe fn register<F>(signal: c_int, action: F) -> Result<SigId, Error>
 where
     F: Fn() + Sync + Send + 'static,
 {
-    register_sigaction_(signal, move |_: &_| action())
+    register_sigaction_impl(signal, move |_: &_| action())
 }
 
 /// Register a signal action.
@@ -452,10 +452,10 @@ pub unsafe fn register_sigaction<F>(signal: c_int, action: F) -> Result<SigId, E
 where
     F: Fn(&siginfo_t) + Sync + Send + 'static,
 {
-    register_sigaction_(signal, action)
+    register_sigaction_impl(signal, action)
 }
 
-unsafe fn register_sigaction_<F>(signal: c_int, action: F) -> Result<SigId, Error>
+unsafe fn register_sigaction_impl<F>(signal: c_int, action: F) -> Result<SigId, Error>
 where
     F: Fn(&siginfo_t) + Sync + Send + 'static,
 {
@@ -464,7 +464,7 @@ where
         "Attempted to register forbidden signal {}",
         signal,
     );
-    register_unchecked_(signal, action)
+    register_unchecked_impl(signal, action)
 }
 
 /// Register a signal action without checking for forbidden signals.
@@ -475,7 +475,7 @@ pub unsafe fn register_signal_unchecked<F>(signal: c_int, action: F) -> Result<S
 where
     F: Fn() + Sync + Send + 'static,
 {
-    register_unchecked_(signal, move |_: &_| action())
+    register_unchecked_impl(signal, move |_: &_| action())
 }
 
 /// Register a signal action without checking for forbidden signals.
@@ -492,10 +492,10 @@ pub unsafe fn register_unchecked<F>(signal: c_int, action: F) -> Result<SigId, E
 where
     F: Fn(&siginfo_t) + Sync + Send + 'static,
 {
-    register_unchecked_(signal, action)
+    register_unchecked_impl(signal, action)
 }
 
-unsafe fn register_unchecked_<F>(signal: c_int, action: F) -> Result<SigId, Error>
+unsafe fn register_unchecked_impl<F>(signal: c_int, action: F) -> Result<SigId, Error>
 where
     F: Fn(&siginfo_t) + Sync + Send + 'static,
 {
