@@ -228,8 +228,17 @@ extern "C" fn handler(sig: c_int) {
         // Problems:
         // - It's racy. But this is inevitably racy in Windows.
         // - Interacts poorly with handlers outside signal-hook-registry.
-        unsafe {
-            libc::signal(sig, handler as sighandler_t);
+        let old = unsafe { libc::signal(sig, handler as sighandler_t) };
+        if old == SIG_ERR {
+            // MSDN doesn't describe which errors might occur,
+            // but we can tell from the Linux manpage that
+            // EINVAL (invalid signal number) is mostly the only case.
+            // Therefore, this branch must not occur.
+            // In any case we can do nothing useful in the signal handler,
+            // so we're going to abort silently.
+            unsafe {
+                libc::abort();
+            }
         }
     }
 
