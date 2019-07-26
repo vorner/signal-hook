@@ -42,6 +42,22 @@
 //! require dependencies that don't build there, so tests need newer Rust version (they are run on
 //! stable).
 //!
+//! # Portability
+//!
+//! This crate includes a limited support for Windows, based on `signal`/`raise` in the CRT.
+//! There are differences in both API and behavior:
+//!
+//! - Due to lack of `siginfo_t`, we don't provide `register_sigaction` or `register_unchecked`.
+//! - Due to lack of signal blocking, there's a race condition.
+//!   After the call to `signal`, there's a moment where we miss a signal.
+//!   That means when you register a handler, there may be a signal which invokes
+//!   neither the default handler or the handler you register.
+//! - Handlers registered by `signal` in Windows are cleared on first signal.
+//!   To match behavior in other platforms, we re-register the handler each time the handler is
+//!   called, but there's a moment where we miss a handler.
+//!   That means when you receive two signals in a row, there may be a signal which invokes
+//!   the default handler, nevertheless you certainly have registered the handler.
+//!
 //! [signal-hook]: https://docs.rs/signal-hook
 //! [async-signal-safe]: http://www.man7.org/linux/man-pages/man7/signal-safety.7.html
 
@@ -52,6 +68,7 @@ use std::collections::hash_map::Entry;
 use std::collections::{BTreeMap, HashMap};
 use std::io::Error;
 use std::mem;
+#[cfg(not(windows))]
 use std::ptr;
 // Once::new is now a const-fn. But it is not stable in all the rustc versions we want to support
 // yet.
@@ -60,9 +77,29 @@ use std::sync::ONCE_INIT;
 use std::sync::{Arc, Mutex, MutexGuard, Once};
 
 use arc_swap::IndependentArcSwap;
+#[cfg(not(windows))]
 use libc::{c_int, c_void, sigaction, siginfo_t, sigset_t, SIG_BLOCK, SIG_SETMASK};
+#[cfg(windows)]
+use libc::{c_int, sighandler_t};
 
+#[cfg(not(windows))]
 use libc::{SIGFPE, SIGILL, SIGKILL, SIGSEGV, SIGSTOP};
+#[cfg(windows)]
+use libc::{SIGFPE, SIGILL, SIGSEGV};
+
+// These constants are not defined in the current version of libc, but it actually
+// exists in Windows CRT.
+#[cfg(windows)]
+const SIG_DFL: sighandler_t = 0;
+#[cfg(windows)]
+const SIG_IGN: sighandler_t = 1;
+#[cfg(windows)]
+const SIG_ERR: sighandler_t = !0;
+
+// To simplify implementation. Not to be exposed.
+#[cfg(windows)]
+#[allow(non_camel_case_types)]
+struct siginfo_t;
 
 // # Internal workings
 //
@@ -97,6 +134,9 @@ type Action = Fn(&siginfo_t) + Send + Sync;
 
 #[derive(Clone)]
 struct Slot {
+    #[cfg(windows)]
+    prev: sighandler_t,
+    #[cfg(not(windows))]
     prev: sigaction,
     // We use BTreeMap here, because we want to run the actions in the order they were inserted.
     // This works, because the ActionIds are assigned in an increasing order.
@@ -104,6 +144,19 @@ struct Slot {
 }
 
 impl Slot {
+    #[cfg(windows)]
+    fn new(signal: libc::c_int) -> Result<Self, Error> {
+        let old = unsafe { libc::signal(signal, handler as sighandler_t) };
+        if old == SIG_ERR {
+            return Err(Error::last_os_error());
+        }
+        Ok(Slot {
+            prev: old,
+            actions: BTreeMap::new(),
+        })
+    }
+
+    #[cfg(not(windows))]
     fn new(signal: libc::c_int) -> Result<Self, Error> {
         // C data structure, expected to be zeroed out.
         let mut new: libc::sigaction = unsafe { mem::zeroed() };
@@ -167,6 +220,47 @@ impl GlobalData {
     }
 }
 
+#[cfg(windows)]
+extern "C" fn handler(sig: c_int) {
+    if sig != SIGFPE {
+        // Windows CRT `signal` resets handler every time, unless for SIGFPE.
+        // Reregister the handler to retain maximal compatibility.
+        // Problems:
+        // - It's racy. But this is inevitably racy in Windows.
+        // - Interacts poorly with handlers outside signal-hook-registry.
+        let old = unsafe { libc::signal(sig, handler as sighandler_t) };
+        if old == SIG_ERR {
+            // MSDN doesn't describe which errors might occur,
+            // but we can tell from the Linux manpage that
+            // EINVAL (invalid signal number) is mostly the only case.
+            // Therefore, this branch must not occur.
+            // In any case we can do nothing useful in the signal handler,
+            // so we're going to abort silently.
+            unsafe {
+                libc::abort();
+            }
+        }
+    }
+
+    let signals = GlobalData::get().all_signals.peek_signal_safe();
+
+    if let Some(ref slot) = signals.get(&sig) {
+        let fptr = slot.prev;
+        if fptr != 0 && fptr != SIG_DFL && fptr != SIG_IGN {
+            // FFI ‒ calling the original signal handler.
+            unsafe {
+                let action = mem::transmute::<usize, extern "C" fn(c_int)>(fptr);
+                action(sig);
+            }
+        }
+
+        for action in slot.actions.values() {
+            action(&siginfo_t);
+        }
+    }
+}
+
+#[cfg(not(windows))]
 extern "C" fn handler(sig: c_int, info: *mut siginfo_t, data: *mut c_void) {
     let signals = GlobalData::get().all_signals.peek_signal_safe();
 
@@ -204,6 +298,7 @@ extern "C" fn handler(sig: c_int, info: *mut siginfo_t, data: *mut c_void) {
     }
 }
 
+#[cfg(not(windows))]
 fn block_signal(signal: c_int) -> Result<sigset_t, Error> {
     unsafe {
         // The mem::unitialized is deprecated because it is hard to use correctly in Rust. But
@@ -224,6 +319,7 @@ fn block_signal(signal: c_int) -> Result<sigset_t, Error> {
     }
 }
 
+#[cfg(not(windows))]
 fn restore_signals(signals: libc::sigset_t) -> Result<(), Error> {
     if unsafe { libc::sigprocmask(SIG_SETMASK, &signals, ptr::null_mut()) } == 0 {
         Ok(())
@@ -232,6 +328,13 @@ fn restore_signals(signals: libc::sigset_t) -> Result<(), Error> {
     }
 }
 
+#[cfg(windows)]
+fn without_signal<F: FnOnce() -> Result<(), Error>>(_signal: c_int, f: F) -> Result<(), Error> {
+    // We don't have such a mechanism in Windows.
+    f()
+}
+
+#[cfg(not(windows))]
 fn without_signal<F: FnOnce() -> Result<(), Error>>(signal: c_int, f: F) -> Result<(), Error> {
     let old_signals = block_signal(signal)?;
     let result = f();
@@ -247,7 +350,12 @@ fn without_signal<F: FnOnce() -> Result<(), Error>>(signal: c_int, f: F) -> Resu
 /// these signals is attempted.
 ///
 /// See [`register`](fn.register.html).
-pub const FORBIDDEN: &[c_int] = &[SIGKILL, SIGSTOP, SIGILL, SIGFPE, SIGSEGV];
+pub const FORBIDDEN: &[c_int] = FORBIDDEN_IMPL;
+
+#[cfg(windows)]
+const FORBIDDEN_IMPL: &[c_int] = &[SIGILL, SIGFPE, SIGSEGV];
+#[cfg(not(windows))]
+const FORBIDDEN_IMPL: &[c_int] = &[SIGKILL, SIGSTOP, SIGILL, SIGFPE, SIGSEGV];
 
 /// Registers an arbitrary action for the given signal.
 ///
@@ -340,7 +448,7 @@ pub unsafe fn register<F>(signal: c_int, action: F) -> Result<SigId, Error>
 where
     F: Fn() + Sync + Send + 'static,
 {
-    register_sigaction(signal, move |_: &_| action())
+    register_sigaction_impl(signal, move |_: &_| action())
 }
 
 /// Register a signal action.
@@ -348,7 +456,15 @@ where
 /// This acts in the same way as [`register`], including the drawbacks, panics and performance
 /// characteristics. The only difference is the provided action accepts a [`siginfo_t`] argument,
 /// providing information about the received signal.
+#[cfg(not(windows))]
 pub unsafe fn register_sigaction<F>(signal: c_int, action: F) -> Result<SigId, Error>
+where
+    F: Fn(&siginfo_t) + Sync + Send + 'static,
+{
+    register_sigaction_impl(signal, action)
+}
+
+unsafe fn register_sigaction_impl<F>(signal: c_int, action: F) -> Result<SigId, Error>
 where
     F: Fn(&siginfo_t) + Sync + Send + 'static,
 {
@@ -357,7 +473,18 @@ where
         "Attempted to register forbidden signal {}",
         signal,
     );
-    register_unchecked(signal, action)
+    register_unchecked_impl(signal, action)
+}
+
+/// Register a signal action without checking for forbidden signals.
+///
+/// This acts in the same way as [`register_unchecked`], including the drawbacks, panics and performance
+/// characteristics. The only difference is the provided action doesn't accept a [`siginfo_t`] argument.
+pub unsafe fn register_signal_unchecked<F>(signal: c_int, action: F) -> Result<SigId, Error>
+where
+    F: Fn() + Sync + Send + 'static,
+{
+    register_unchecked_impl(signal, move |_: &_| action())
 }
 
 /// Register a signal action without checking for forbidden signals.
@@ -369,7 +496,15 @@ where
 /// Note that you really need to know what you're doing if you change eg. the `SIGSEGV` signal
 /// handler. Generally, you don't want to do that. But unlike the other functions here, this
 /// function still allows you to do it.
+#[cfg(not(windows))]
 pub unsafe fn register_unchecked<F>(signal: c_int, action: F) -> Result<SigId, Error>
+where
+    F: Fn(&siginfo_t) + Sync + Send + 'static,
+{
+    register_unchecked_impl(signal, action)
+}
+
+unsafe fn register_unchecked_impl<F>(signal: c_int, action: F) -> Result<SigId, Error>
 where
     F: Fn(&siginfo_t) + Sync + Send + 'static,
 {
@@ -435,23 +570,57 @@ mod tests {
     use std::thread;
     use std::time::Duration;
 
+    #[cfg(not(windows))]
     use libc::{pid_t, SIGUSR1, SIGUSR2};
+
+    #[cfg(windows)]
+    use libc::SIGTERM as SIGUSR1;
+    #[cfg(windows)]
+    use libc::SIGTERM as SIGUSR2;
 
     use super::*;
 
     #[test]
     #[should_panic]
     fn panic_forbidden() {
-        let _ = unsafe { register(SIGKILL, || ()) };
+        let _ = unsafe { register(SIGILL, || ()) };
     }
 
     /// Registering the forbidden signals is allowed in the _unchecked version.
     #[test]
     fn forbidden_raw() {
-        unsafe { register_unchecked(SIGFPE, |_| std::process::abort()).unwrap() };
+        unsafe { register_signal_unchecked(SIGFPE, || std::process::abort()).unwrap() };
     }
 
     #[test]
+    fn signal_without_pid() {
+        let status = Arc::new(AtomicUsize::new(0));
+        let action = {
+            let status = Arc::clone(&status);
+            move || {
+                status.store(1, Ordering::Relaxed);
+            }
+        };
+        unsafe {
+            register(SIGUSR2, action).unwrap();
+            libc::raise(SIGUSR2);
+        }
+        for _ in 0..10 {
+            thread::sleep(Duration::from_millis(100));
+            let current = status.load(Ordering::Relaxed);
+            match current {
+                // Not yet
+                0 => continue,
+                // Good, we are done with the correct result
+                _ if current == 1 => return,
+                _ => panic!("Wrong result value {}", current),
+            }
+        }
+        panic!("Timed out waiting for the signal");
+    }
+
+    #[test]
+    #[cfg(not(windows))]
     fn signal_with_pid() {
         let status = Arc::new(AtomicUsize::new(0));
         let action = {
@@ -480,7 +649,7 @@ mod tests {
         unsafe {
             pid = libc::getpid();
             register_sigaction(SIGUSR2, action).unwrap();
-            libc::kill(pid, SIGUSR2);
+            libc::raise(SIGUSR2);
         }
         for _ in 0..10 {
             thread::sleep(Duration::from_millis(100));

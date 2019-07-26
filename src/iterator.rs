@@ -25,7 +25,7 @@
 //! #       signal_hook::SIGUSR1,
 //!     ])?;
 //! #   // A trick to terminate the example when run as doc-test. Not part of the real code.
-//! #   unsafe { libc::kill(libc::getpid(), signal_hook::SIGUSR1) };
+//! #   unsafe { libc::raise(signal_hook::SIGUSR1) };
 //!     'outer: loop {
 //!         // Pick up signals that arrived since last time
 //!         for signal in signals.pending() {
@@ -485,7 +485,7 @@ mod mio_support {
             poll.register(&signals, token, Ready::readable(), PollOpt::level())
                 .unwrap();
             let mut events = Events::with_capacity(10);
-            unsafe { libc::kill(libc::getpid(), ::SIGUSR1) };
+            unsafe { libc::raise(::SIGUSR1) };
             poll.poll(&mut events, Some(Duration::from_secs(10)))
                 .unwrap();
             let event = events.iter().next().unwrap();
@@ -601,7 +601,7 @@ mod tokio_support {
         ///         .into_future()
         ///         .map(|sig| assert_eq!(sig.0.unwrap(), signal_hook::SIGUSR1))
         ///         .map_err(|e| panic!("{}", e.0));
-        ///     unsafe { libc::kill(libc::getpid(), signal_hook::SIGUSR1) };
+        ///     unsafe { libc::raise(signal_hook::SIGUSR1) };
         ///     tokio::run(wait_signal);
         ///     Ok(())
         /// }

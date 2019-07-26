@@ -85,8 +85,26 @@
 //! It should work on any POSIX.1-2001 system, which are all the major big OSes with the notable
 //! exception of Windows.
 //!
-//! Windows has some limited support for signals, patches to include support in this library are
-//! welcome.
+//! This crate includes a limited support for Windows, based on `signal`/`raise` in the CRT.
+//! There are differences in both API and behavior:
+//!
+//! - `iterator` and `pipe` are not yet implemented.
+//! - We have only a few signals: `SIGABRT`, `SIGABRT_COMPAT`, `SIGBREAK`,
+//!   `SIGFPE`, `SIGILL`, `SIGINT`, `SIGSEGV` and `SIGTERM`.
+//! - Due to lack of signal blocking, there's a race condition.
+//!   After the call to `signal`, there's a moment where we miss a signal.
+//!   That means when you register a handler, there may be a signal which invokes
+//!   neither the default handler or the handler you register.
+//! - Handlers registered by `signal` in Windows are cleared on first signal.
+//!   To match behavior in other platforms, we re-register the handler each time the handler is
+//!   called, but there's a moment where we miss a handler.
+//!   That means when you receive two signals in a row, there may be a signal which invokes
+//!   the default handler, nevertheless you certainly have registered the handler.
+//!
+//! Moreover, signals won't work as you expected. `SIGTERM` isn't actually used and
+//! not all `Ctrl-C`s are turned into `SIGINT`.
+//!
+//! Patches to improve Windows support in this library are welcome.
 //!
 //! # Examples
 //!
@@ -130,13 +148,27 @@ extern crate signal_hook_registry;
 extern crate tokio_reactor;
 
 pub mod flag;
+#[cfg(not(windows))]
 pub mod iterator;
+#[cfg(not(windows))]
 pub mod pipe;
 
+#[cfg(not(windows))]
 pub use libc::{
     SIGABRT, SIGALRM, SIGBUS, SIGCHLD, SIGCONT, SIGFPE, SIGHUP, SIGILL, SIGINT, SIGIO, SIGKILL,
     SIGPIPE, SIGPROF, SIGQUIT, SIGSEGV, SIGSTOP, SIGSYS, SIGTERM, SIGTRAP, SIGUSR1, SIGUSR2,
     SIGWINCH,
 };
+
+#[cfg(windows)]
+pub use libc::{SIGABRT, SIGFPE, SIGILL, SIGINT, SIGSEGV, SIGTERM};
+
+// NOTE: they perhaps deserve backport to libc.
+#[cfg(windows)]
+/// Same as `SIGABRT`, but the number is compatible to other platforms.
+pub const SIGABRT_COMPAT: libc::c_int = 6;
+#[cfg(windows)]
+/// Ctrl-Break is pressed for Windows Console processes.
+pub const SIGBREAK: libc::c_int = 21;
 
 pub use signal_hook_registry::{register, unregister, SigId, FORBIDDEN};
