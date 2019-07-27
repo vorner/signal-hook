@@ -1,7 +1,7 @@
 [package]
 name = "signal-hook"
 version = "0.1.10"
-authors = ["Michal 'vorner' Vaner <vorner@vorner.cz>"]
+authors = ["Michal 'vorner' Vaner <vorner@vorner.cz>", "Masaki Hara <ackie.h.gmai@gmail.com>"]
 description = "Unix signal handling"
 documentation = "https://docs.rs/signal-hook"
 repository = "https://github.com/vorner/signal-hook"
