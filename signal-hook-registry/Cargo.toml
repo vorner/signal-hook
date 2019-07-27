@@ -1,7 +1,11 @@
 [package]
 name = "signal-hook-registry"
-version = "1.0.1"
-authors = ["Michal 'vorner' Vaner <vorner@vorner.cz>"]
+version = "1.1.0"
+authors = [
+    "Michal 'vorner' Vaner <vorner@vorner.cz>",
+    "Masaki Hara <ackie.h.gmai@gmail.com>",
+]
+
 description = "Backend crate for signal-hook"
 documentation = "https://docs.rs/signal-hook-registry"
 readme = "README.md"

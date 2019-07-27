@@ -1,3 +1,7 @@
+# registry-1.1.0
+
+* Adding Windows support (thanks to @qnighy).
+
 # 0.1.10
 
 * Fix busy loop in Iterator::forever when the mio-support feature is enabled
