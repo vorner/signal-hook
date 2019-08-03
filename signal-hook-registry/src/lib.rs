@@ -242,7 +242,7 @@ extern "C" fn handler(sig: c_int) {
         }
     }
 
-    let signals = GlobalData::get().all_signals.peek_signal_safe();
+    let signals = GlobalData::get().all_signals.load_signal_safe();
 
     if let Some(ref slot) = signals.get(&sig) {
         let fptr = slot.prev;
