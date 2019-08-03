@@ -1,6 +1,6 @@
 [package]
 name = "signal-hook-registry"
-version = "1.1.0"
+version = "1.1.1"
 authors = [
     "Michal 'vorner' Vaner <vorner@vorner.cz>",
     "Masaki Hara <ackie.h.gmai@gmail.com>",
@@ -18,7 +18,7 @@ travis-ci = { repository = "vorner/signal-hook" }
 maintenance = { status = "actively-developed" }
 
 [dependencies]
-arc-swap = "~0.3.5"
+arc-swap = "~0.4"
 libc = "~0.2"
 
 [dev-dependencies]

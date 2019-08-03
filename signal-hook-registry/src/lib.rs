@@ -1,5 +1,5 @@
 #![doc(
-    html_root_url = "https://docs.rs/signal-hook-registry/1.1.0/signal-hook-registry/",
+    html_root_url = "https://docs.rs/signal-hook-registry/1.1.1/signal-hook-registry/",
     test(attr(deny(warnings)))
 )]
 #![deny(missing_docs, warnings)]
@@ -262,7 +262,7 @@ extern "C" fn handler(sig: c_int) {
 
 #[cfg(not(windows))]
 extern "C" fn handler(sig: c_int, info: *mut siginfo_t, data: *mut c_void) {
-    let signals = GlobalData::get().all_signals.peek_signal_safe();
+    let signals = GlobalData::get().all_signals.load_signal_safe();
 
     if let Some(ref slot) = signals.get(&sig) {
         let fptr = slot.prev.sa_sigaction;

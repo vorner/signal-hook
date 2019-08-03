@@ -1,3 +1,7 @@
+# registry-1.1.1
+
+* Update deps.
+
 # registry-1.1.0
 
 * Adding Windows support (thanks to @qnighy).
