@@ -1,8 +1,8 @@
 //! Module with the self-pipe pattern.
 //!
 //! One of the common patterns around signals is to have a pipe with both ends in the same program.
-//! Whenever there's a signal, the signal handler writes to the write end. The application then can
-//! handle the read end.
+//! Whenever there's a signal, the signal handler writes one byte of garbage data to the write end,
+//! unless the pipe's already full. The application then can handle the read end.
 //!
 //! This has two advantages. First, the real signal action moves outside of the signal handler
 //! where there are a lot less restrictions. Second, it fits nicely in all kinds of asynchronous
