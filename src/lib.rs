@@ -145,7 +145,7 @@ extern crate libc;
 extern crate mio;
 extern crate signal_hook_registry;
 #[cfg(feature = "tokio-support")]
-extern crate tokio_reactor;
+extern crate tokio_net;
 
 pub mod flag;
 #[cfg(not(windows))]

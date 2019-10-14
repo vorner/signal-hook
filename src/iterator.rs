@@ -500,12 +500,13 @@ mod mio_support {
 #[cfg(feature = "tokio-support")]
 mod tokio_support {
     use std::io::Error;
+    use std::pin::Pin;
     use std::sync::atomic::Ordering;
+    use std::task::{Context, Poll};
 
     use futures::stream::Stream;
-    use futures::{Async as AsyncResult, Poll};
     use libc::{self, c_int};
-    use tokio_reactor::{Handle, Registration};
+    use tokio_net::driver::{Handle, Registration};
 
     use super::Signals;
 
@@ -531,29 +532,30 @@ mod tokio_support {
         // It seems we can't easily use the iterator into the array here because of lifetimes ‒
         // using non-'static things in around futures is real pain.
         position: usize,
+        handle: Handle,
     }
 
     impl Async {
         /// Creates a new `Async`.
-        pub fn new(signals: Signals, handle: &Handle) -> Result<Self, Error> {
-            let registration = Registration::new();
-            registration.register_with(&signals, handle)?;
+        pub fn new(signals: Signals, handle: Handle) -> Result<Self, Error> {
             Ok(Async {
-                registration,
+                registration: Registration::new(),
                 inner: signals,
                 position: 0,
+                handle,
             })
         }
     }
 
     impl Stream for Async {
-        type Item = libc::c_int;
-        type Error = Error;
-        fn poll(&mut self) -> Poll<Option<libc::c_int>, Self::Error> {
+        type Item = Result<libc::c_int, Error>;
+
+        fn poll_next(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
             while !self.inner.is_closed() {
                 if self.position >= self.inner.waker.pending.len() {
-                    if self.registration.poll_read_ready()?.is_not_ready() {
-                        return Ok(AsyncResult::NotReady);
+                    self.registration.register_with(&self.inner, &self.handle)?;
+                    if !self.registration.poll_read_ready(cx)?.is_ready() {
+                        return Poll::Pending;
                     }
                     // Non-blocking clean of the pipe
                     while self.inner.flush(false) {}
@@ -562,18 +564,20 @@ mod tokio_support {
                     self.position = 0;
                 }
                 assert!(self.position < self.inner.waker.pending.len());
-                let sig = &self.inner.waker.pending[self.position];
                 let sig_num = self.position;
                 self.position += 1;
+
+                let sig = &self.inner.waker.pending[sig_num];
+
                 if sig
                     .compare_exchange(true, false, Ordering::SeqCst, Ordering::Relaxed)
                     .is_ok()
                 {
                     // Successfully claimed a signal, return it
-                    return Ok(AsyncResult::Ready(Some(sig_num as c_int)));
+                    return Poll::Ready(Some(Ok(sig_num as c_int)));
                 }
             }
-            Ok(AsyncResult::Ready(None))
+            Poll::Ready(None)
         }
     }
 
@@ -593,25 +597,30 @@ mod tokio_support {
         /// use std::io::Error;
         ///
         /// use signal_hook::iterator::Signals;
+        /// use tokio::runtime::current_thread::Runtime;
         /// use tokio::prelude::*;
         ///
         /// fn main() -> Result<(), Error> {
+        ///     let mut runtime = Runtime::new().unwrap();
+        ///
         ///     let wait_signal = Signals::new(&[signal_hook::SIGUSR1])?
         ///         .into_async()?
-        ///         .into_future()
-        ///         .map(|sig| assert_eq!(sig.0.unwrap(), signal_hook::SIGUSR1))
-        ///         .map_err(|e| panic!("{}", e.0));
+        ///         .next()
+        ///         .map(|r| r.unwrap().unwrap()) // there is some and it's ok
+        ///         .map(|sig| assert_eq!(sig, signal_hook::SIGUSR1));
+        ///
         ///     unsafe { libc::raise(signal_hook::SIGUSR1) };
-        ///     tokio::run(wait_signal);
+        ///
+        ///     runtime.block_on(wait_signal);
         ///     Ok(())
         /// }
         /// ```
         pub fn into_async(self) -> Result<Async, Error> {
-            Async::new(self, &Handle::default())
+            Async::new(self, Handle::default())
         }
 
         /// Turns the iterator into a stream, tied into a specific tokio reactor.
-        pub fn into_async_with_handle(self, handle: &Handle) -> Result<Async, Error> {
+        pub fn into_async_with_handle(self, handle: Handle) -> Result<Async, Error> {
             Async::new(self, handle)
         }
     }
