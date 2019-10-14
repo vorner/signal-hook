@@ -1,11 +1,10 @@
 #![doc(
     html_root_url = "https://docs.rs/signal-hook/0.1.10/signal-hook/",
     test(attr(deny(warnings))),
-    test(attr(allow(bare_trait_objects, unknown_lints)))
 )]
 #![deny(missing_docs, warnings)]
 // Don't fail on links to things not enabled in features
-#![allow(unknown_lints, intra_doc_link_resolution_failure)]
+#![allow(intra_doc_link_resolution_failure)]
 
 //! Library for easier and safe Unix signal handling
 //!
@@ -137,15 +136,6 @@
 //! * `tokio-support`: The [`Signals`](iterator/struct.Signals.html) can be turned into
 //!   [`Async`](iterator/struct.Async.html), which provides a `Stream` interface for integration in
 //!   the asynchronous world.
-
-#[cfg(feature = "tokio-support")]
-extern crate futures;
-extern crate libc;
-#[cfg(feature = "mio-support")]
-extern crate mio;
-extern crate signal_hook_registry;
-#[cfg(feature = "tokio-support")]
-extern crate tokio_reactor;
 
 pub mod flag;
 #[cfg(not(windows))]

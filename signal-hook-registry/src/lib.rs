@@ -3,7 +3,6 @@
     test(attr(deny(warnings)))
 )]
 #![deny(missing_docs, warnings)]
-#![allow(unknown_lints, bare_trait_objects)]
 
 //! Backend of the [signal-hook] crate.
 //!
@@ -61,19 +60,12 @@
 //! [signal-hook]: https://docs.rs/signal-hook
 //! [async-signal-safe]: http://www.man7.org/linux/man-pages/man7/signal-safety.7.html
 
-extern crate arc_swap;
-extern crate libc;
-
 use std::collections::hash_map::Entry;
 use std::collections::{BTreeMap, HashMap};
 use std::io::Error;
-use std::mem;
+use std::mem::{self, MaybeUninit};
 #[cfg(not(windows))]
 use std::ptr;
-// Once::new is now a const-fn. But it is not stable in all the rustc versions we want to support
-// yet.
-#[allow(deprecated)]
-use std::sync::ONCE_INIT;
 use std::sync::{Arc, Mutex, MutexGuard, Once};
 
 use arc_swap::IndependentArcSwap;
@@ -127,10 +119,7 @@ pub struct SigId {
     action: ActionId,
 }
 
-// This should be dyn Fn(...), but we want to support Rust 1.26.0 and that one doesn't allow them
-// yet.
-#[allow(unknown_lints, bare_trait_objects)]
-type Action = Fn(&siginfo_t) + Send + Sync;
+type Action = dyn Fn(&siginfo_t) + Send + Sync;
 
 #[derive(Clone)]
 struct Slot {
@@ -191,8 +180,7 @@ struct GlobalData {
 }
 
 static mut GLOBAL_DATA: Option<GlobalData> = None;
-#[allow(deprecated)]
-static GLOBAL_INIT: Once = ONCE_INIT;
+static GLOBAL_INIT: Once = Once::new();
 
 impl GlobalData {
     fn get() -> &'static Self {
@@ -301,16 +289,16 @@ extern "C" fn handler(sig: c_int, info: *mut siginfo_t, data: *mut c_void) {
 #[cfg(not(windows))]
 fn block_signal(signal: c_int) -> Result<sigset_t, Error> {
     unsafe {
-        // The mem::unitialized is deprecated because it is hard to use correctly in Rust. But
-        // MaybeUninit is new and not supported by all the rustc's we want to support. Furthermore,
-        // sigset_t is a C type anyway and rust limitations should not apply to it, right?
-        #[allow(deprecated)]
-        let mut newsigs: sigset_t = mem::uninitialized();
-        libc::sigemptyset(&mut newsigs);
-        libc::sigaddset(&mut newsigs, signal);
-        #[allow(deprecated)]
-        let mut oldsigs: sigset_t = mem::uninitialized();
-        libc::sigemptyset(&mut oldsigs);
+        let mut newsigs = MaybeUninit::<sigset_t>::uninit();
+        libc::sigemptyset(newsigs.as_mut_ptr());
+        libc::sigaddset(newsigs.as_mut_ptr(), signal);
+
+        let mut oldsigs = MaybeUninit::<sigset_t>::uninit();
+        libc::sigemptyset(oldsigs.as_mut_ptr());
+
+        let mut oldsigs = oldsigs.assume_init();
+        let newsigs = newsigs.assume_init();
+
         if libc::sigprocmask(SIG_BLOCK, &newsigs, &mut oldsigs) == 0 {
             Ok(oldsigs)
         } else {

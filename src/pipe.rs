@@ -79,7 +79,7 @@ use std::os::unix::io::{AsRawFd, RawFd};
 
 use libc::{self, c_int};
 
-use SigId;
+use crate::SigId;
 
 pub(crate) fn wake(pipe: RawFd) {
     unsafe {
@@ -102,7 +102,7 @@ pub(crate) fn wake(pipe: RawFd) {
 /// In this case, the pipe is taken as the `RawFd`. It is still the caller's responsibility to
 /// close it.
 pub fn register_raw(signal: c_int, pipe: RawFd) -> Result<SigId, Error> {
-    unsafe { ::register(signal, move || wake(pipe)) }
+    unsafe { crate::register(signal, move || wake(pipe)) }
 }
 
 /// Registers a write to a self-pipe whenever there's the signal.
@@ -116,5 +116,5 @@ where
     P: AsRawFd + Send + Sync + 'static,
 {
     let action = move || wake(pipe.as_raw_fd());
-    unsafe { ::register(signal, action) }
+    unsafe { crate::register(signal, action) }
 }

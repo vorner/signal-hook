@@ -5,6 +5,7 @@ authors = [
     "Michal 'vorner' Vaner <vorner@vorner.cz>",
     "Masaki Hara <ackie.h.gmai@gmail.com>",
 ]
+edition = "2018"
 
 description = "Backend crate for signal-hook"
 documentation = "https://docs.rs/signal-hook-registry"
