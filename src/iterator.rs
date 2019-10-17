@@ -589,7 +589,7 @@ mod tokio_support {
         ///
         /// # Examples
         ///
-        /// ```rust
+        /// ```rust,ignore
         /// extern crate libc;
         /// extern crate signal_hook;
         /// extern crate tokio;

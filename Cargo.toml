@@ -21,6 +21,7 @@ tokio-support = ["futures-preview", "mio-support", "tokio-net"]
 members = [
     "./",
     "signal-hook-registry",
+    "tokio-tests",
 ]
 
 [dependencies]
@@ -32,7 +33,6 @@ tokio-net = { version = "0.2.0-alpha", optional = true }
 
 [dev-dependencies]
 version-sync = "~0.8"
-tokio = "0.2.0-alpha.6"
 
 [package.metadata.docs.rs]
 all-features = true

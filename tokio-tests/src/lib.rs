@@ -1,6 +1,4 @@
-#![cfg(not(windows))]
-
-#[cfg(feature = "tokio-support")]
+#[cfg(test)]
 mod tests {
     extern crate futures;
     extern crate libc;

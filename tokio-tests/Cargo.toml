@@ -1,0 +1,10 @@
+[package]
+name = "tokio-tests"
+version = "0.1.0"
+authors = ["Michal 'vorner' Vaner <vorner@vorner.cz>"]
+
+[dependencies]
+futures-preview = "0.3.0-alpha.19"
+tokio = "0.2.0-alpha.6"
+libc = "~0.2"
+signal-hook = { path = "..", features = ["tokio-support"] }
