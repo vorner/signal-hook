@@ -21,14 +21,17 @@ script:
       export RUST_BACKTRACE=1 &&
       export CARGO_INCREMENTAL=1 &&
       (test "$TRAVIS_RUST_VERSION" == 1.26.0 || rm -f Cargo.lock) &&
+      # for all targets on all platforms
       cargo build --package signal-hook --package signal-hook-registry &&
-      (test "$TRAVIS_RUST_VERSION" == 1.26.0 || test "$TRAVIS_RUST_VERSION" == "stable" || cargo build --all --all-features) &&
-      (test "$TRAVIS_RUST_VERSION" == 1.26.0 || cargo test --package signal-hook --package signal-hook-registry) &&
-      (test "$TRAVIS_RUST_VERSION" == 1.26.0 || test "$TRAVIS_RUST_VERSION" == "stable" || cargo test --all --all-features) &&
       cargo doc --no-deps &&
+      # for stable/beta/nightly on all platforms
+      (test "$TRAVIS_RUST_VERSION" == 1.26.0 || cargo test   --package signal-hook --package signal-hook-registry) &&
       (test "$TRAVIS_RUST_VERSION" == 1.26.0 || cargo clippy --package signal-hook --package signal-hook-registry --tests -- --deny clippy::all) &&
-      (test "$TRAVIS_RUST_VERSION" == 1.26.0 || test "$TRAVIS_RUST_VERSION" == "stable" || cargo clippy --package tokio-tests --tests -- --deny clippy::all) &&
-      (test "$TRAVIS_RUST_VERSION" == 1.26.0 || cargo fmt)
+      (test "$TRAVIS_RUST_VERSION" == 1.26.0 || cargo fmt) &&
+      # for beta/nightly on macOS/linux
+      (test "$TRAVIS_RUST_VERSION" == 1.26.0 || test "$TRAVIS_RUST_VERSION" == "stable" || test "$TRAVIS_OS_NAME" == "windows" || cargo build  --all --all-features) &&
+      (test "$TRAVIS_RUST_VERSION" == 1.26.0 || test "$TRAVIS_RUST_VERSION" == "stable" || test "$TRAVIS_OS_NAME" == "windows" || cargo test   --all --all-features) &&
+      (test "$TRAVIS_RUST_VERSION" == 1.26.0 || test "$TRAVIS_RUST_VERSION" == "stable" || test "$TRAVIS_OS_NAME" == "windows" || cargo clippy --package tokio-tests --tests -- --deny clippy::all)
 
 matrix:
     allow_failures:
