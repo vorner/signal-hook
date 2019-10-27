@@ -1,3 +1,8 @@
+# 0.1.11
+
+* Docs improvements.
+* Fix registering pipes as well as sockets into the pipe module (#27).
+
 # registry-1.1.1
 
 * Update deps.
