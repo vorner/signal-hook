@@ -395,7 +395,7 @@ const FORBIDDEN_IMPL: &[c_int] = &[SIGKILL, SIGSTOP, SIGILL, SIGFPE, SIGSEGV];
 /// However, if an error *is* returned, there are no guarantees if the given action was registered
 /// or not.
 ///
-/// # Unsafety
+/// # Safety
 ///
 /// This function is unsafe, because the `action` is run inside a signal handler. The set of
 /// functions allowed to be called from within is very limited (they are called signal-safe
@@ -456,6 +456,10 @@ where
 /// This acts in the same way as [`register`], including the drawbacks, panics and performance
 /// characteristics. The only difference is the provided action accepts a [`siginfo_t`] argument,
 /// providing information about the received signal.
+///
+/// # Safety
+///
+/// See the details of [`register`].
 #[cfg(not(windows))]
 pub unsafe fn register_sigaction<F>(signal: c_int, action: F) -> Result<SigId, Error>
 where
@@ -478,8 +482,13 @@ where
 
 /// Register a signal action without checking for forbidden signals.
 ///
-/// This acts in the same way as [`register_unchecked`], including the drawbacks, panics and performance
-/// characteristics. The only difference is the provided action doesn't accept a [`siginfo_t`] argument.
+/// This acts in the same way as [`register_unchecked`], including the drawbacks, panics and
+/// performance characteristics. The only difference is the provided action doesn't accept a
+/// [`siginfo_t`] argument.
+///
+/// # Safety
+///
+/// See the details of [`register`].
 pub unsafe fn register_signal_unchecked<F>(signal: c_int, action: F) -> Result<SigId, Error>
 where
     F: Fn() + Sync + Send + 'static,
@@ -496,6 +505,10 @@ where
 /// Note that you really need to know what you're doing if you change eg. the `SIGSEGV` signal
 /// handler. Generally, you don't want to do that. But unlike the other functions here, this
 /// function still allows you to do it.
+///
+/// # Safety
+///
+/// See the details of [`register`].
 #[cfg(not(windows))]
 pub unsafe fn register_unchecked<F>(signal: c_int, action: F) -> Result<SigId, Error>
 where
