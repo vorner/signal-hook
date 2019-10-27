@@ -9,7 +9,7 @@
 //! loops and has less chance of race conditions.
 //!
 //! This module offers premade functions for the write end (and doesn't insist that it must be a
-//! pipe ‒ anything that can be `sent` to is fine ‒ sockets too, therefore `UnixStream::pair` is a
+//! pipe ‒ anything that can be written to is fine ‒ sockets too, therefore `UnixStream::pair` is a
 //! good candidate).
 //!
 //! If you want to integrate with some asynchronous library, plugging streams from `mio-uds` or
@@ -81,19 +81,52 @@ use libc::{self, c_int};
 
 use SigId;
 
+struct OwnedFd(RawFd);
+
+impl OwnedFd {
+    /// Sets close on exec and nonblock on the inner file descriptor.
+    fn set_flags(&self) -> Result<(), Error> {
+        unsafe {
+            let flags = libc::fcntl(self.as_raw_fd(), libc::F_GETFL, 0);
+            if flags == -1 {
+                return Err(Error::last_os_error());
+            }
+            let flags = flags | libc::O_NONBLOCK | libc::O_CLOEXEC;
+            if libc::fcntl(self.as_raw_fd(), libc::F_SETFL, flags) == -1 {
+                return Err(Error::last_os_error());
+            }
+        }
+        Ok(())
+    }
+}
+
+impl AsRawFd for OwnedFd {
+    fn as_raw_fd(&self) -> RawFd {
+        self.0
+    }
+}
+
+impl Drop for OwnedFd {
+    fn drop(&mut self) {
+        unsafe {
+            libc::close(self.0);
+        }
+    }
+}
+
 pub(crate) fn wake(pipe: RawFd) {
     unsafe {
-        // This sends some data into the pipe.
+        // This writes some data into the pipe.
         //
         // There are two tricks:
         // * First, the crazy cast. The first part turns reference into pointer. The second part
-        //   turns pointer to u8 into a pointer to void, which is what send requires.
+        //   turns pointer to u8 into a pointer to void, which is what write requires.
         // * Second, we ignore errors, on purpose. We don't have any means to handling them. The
         //   two conceivable errors are EBADFD, if someone passes a non-existent file descriptor or
         //   if it is closed. The second is EAGAIN, in which case the pipe is full ‒ there were
         //   many signals, but the reader didn't have time to read the data yet. It'll still get
         //   woken up, so not fitting another letter in it is fine.
-        libc::send(pipe, b"X" as *const _ as *const _, 1, libc::MSG_DONTWAIT);
+        libc::write(pipe, b"X" as *const _ as *const _, 1);
     }
 }
 
@@ -102,7 +135,17 @@ pub(crate) fn wake(pipe: RawFd) {
 /// In this case, the pipe is taken as the `RawFd`. It is still the caller's responsibility to
 /// close it.
 pub fn register_raw(signal: c_int, pipe: RawFd) -> Result<SigId, Error> {
-    unsafe { ::register(signal, move || wake(pipe)) }
+    // A trick here:
+    // We want to set the FD non-blocking. But it belongs to the caller. Therefore, we make our own
+    // copy with `dup` to play on instead.
+    let duped = unsafe { libc::dup(pipe) };
+    if duped == -1 {
+        return Err(Error::last_os_error());
+    }
+    let duped = OwnedFd(duped);
+    duped.set_flags()?;
+    let action = move || wake(duped.as_raw_fd());
+    unsafe { ::register(signal, action) }
 }
 
 /// Registers a write to a self-pipe whenever there's the signal.
@@ -115,6 +158,66 @@ pub fn register<P>(signal: c_int, pipe: P) -> Result<SigId, Error>
 where
     P: AsRawFd + Send + Sync + 'static,
 {
-    let action = move || wake(pipe.as_raw_fd());
-    unsafe { ::register(signal, action) }
+    let id = register_raw(signal, pipe.as_raw_fd())?;
+    // Close the original
+    drop(pipe);
+    Ok(id)
+}
+
+#[cfg(test)]
+mod tests {
+    use std::io::Read;
+    use std::os::unix::net::{UnixDatagram, UnixStream};
+
+    use super::*;
+
+    // Note: multiple tests share the SIGUSR1 signal. This is fine, we only need to know the signal
+    // arrives. It's OK to arrive multiple times, from multiple tests.
+    fn wakeup() {
+        unsafe { assert_eq!(0, libc::raise(libc::SIGUSR1)) }
+    }
+
+    #[test]
+    fn register_with_socket() -> Result<(), Error> {
+        let (mut read, write) = UnixStream::pair()?;
+        register(libc::SIGUSR1, write)?;
+        read.set_nonblocking(true)?;
+        wakeup();
+        let mut buff = [0; 1];
+        read.read_exact(&mut buff)?;
+        assert_eq!(b"X", &buff);
+        Ok(())
+    }
+
+    #[test]
+    fn register_dgram_socket() -> Result<(), Error> {
+        let (read, write) = UnixDatagram::pair()?;
+        register(libc::SIGUSR1, write)?;
+        read.set_nonblocking(true)?;
+        wakeup();
+        let mut buff = [0; 1];
+        read.recv(&mut buff)?;
+        assert_eq!(b"X", &buff);
+        Ok(())
+    }
+
+    #[test]
+    fn register_with_pipe() -> Result<(), Error> {
+        let mut fds = [0; 2];
+        unsafe { assert_eq!(0, libc::pipe(fds.as_mut_ptr())) };
+        let read = OwnedFd(fds[0]);
+        let write = OwnedFd(fds[1]);
+        register(libc::SIGUSR1, write)?;
+        read.set_flags()?;
+        wakeup();
+        let mut buff = [0; 1];
+        unsafe {
+            assert_eq!(
+                1,
+                libc::read(read.as_raw_fd(), buff.as_mut_ptr() as *mut _, 1)
+            )
+        }
+        assert_eq!(b"X", &buff);
+        Ok(())
+    }
 }
