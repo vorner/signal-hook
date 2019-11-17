@@ -576,6 +576,38 @@ pub fn unregister(id: SigId) -> bool {
     replace
 }
 
+/// Removes all previously installed actions for a given signal.
+///
+/// This is similar to the [`unregister`](fn.unregister.html) function, with the sole difference it
+/// removes all actions for the given signal.
+///
+/// Returns if any hooks were actually removed (returns false if there was no hook registered for
+/// the signal).
+///
+/// # Warning
+///
+/// Similar to [`unregister`](fn.unregister.html), this does not manipulate the signal handler in
+/// the OS, it only removes the hooks on the Rust side.
+///
+/// Furthermore, this will remove *all* signal hooks of the given signal. These may have been
+/// registered by some library or unrelated part of the program. Therefore, this should be only
+/// used by the top-level application.
+pub fn unregister_signal(signal: c_int) -> bool {
+    let globals = GlobalData::ensure();
+    let (mut signals, lock) = globals.load();
+    let mut replace = false;
+    if let Some(slot) = signals.get_mut(&signal) {
+        if !slot.actions.is_empty() {
+            slot.actions.clear();
+            replace = true;
+        }
+    }
+    if replace {
+        globals.store(signals, lock);
+    }
+    replace
+}
+
 #[cfg(test)]
 mod tests {
     use std::sync::atomic::{AtomicUsize, Ordering};

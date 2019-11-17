@@ -1,3 +1,7 @@
+# Unreleased
+
+* `unregister_signal`, to remove all hooks of one signal.
+
 # 0.1.11
 
 * Docs improvements.
