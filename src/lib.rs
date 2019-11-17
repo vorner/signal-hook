@@ -147,6 +147,7 @@ extern crate signal_hook_registry;
 #[cfg(feature = "tokio-support")]
 extern crate tokio_reactor;
 
+pub mod cleanup;
 pub mod flag;
 #[cfg(not(windows))]
 pub mod iterator;
@@ -171,4 +172,4 @@ pub const SIGABRT_COMPAT: libc::c_int = 6;
 /// Ctrl-Break is pressed for Windows Console processes.
 pub const SIGBREAK: libc::c_int = 21;
 
-pub use signal_hook_registry::{register, unregister, unregister_signal, SigId, FORBIDDEN};
+pub use signal_hook_registry::{register, unregister, SigId, FORBIDDEN};
