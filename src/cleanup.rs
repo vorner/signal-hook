@@ -20,9 +20,16 @@
 //! * Manually resetting the handlers just before the shutdown. This is done with [cleanup_signal].
 
 use std::io::Error;
+#[cfg(not(windows))]
 use std::ptr;
 
-use libc::{c_int, sighandler_t, SIG_DFL, SIG_ERR};
+use libc::{c_int, sighandler_t, SIG_ERR};
+
+#[cfg(not(windows))]
+use libc::SIG_DFL;
+// Unfortunately, not exported on windows :-(. Checked this actually works by tests/default.rs.
+#[cfg(windows)]
+const SIG_DFL: sighandler_t = 0;
 
 pub use signal_hook_registry::unregister_signal;
 
@@ -108,7 +115,8 @@ pub fn cleanup_signal(signal: c_int) -> Result<(), Error> {
     // We use `signal` both on unix and windows here. Unlike with regular functions, usage of
     // SIG_DFL is portable and much more convenient to use.
     let result = cleanup_raw(signal);
-    if result == SIG_ERR {
+    // The cast is needed on windows :-|.
+    if result == SIG_ERR as _ {
         return Err(Error::last_os_error());
     }
     unregister_signal(signal);
