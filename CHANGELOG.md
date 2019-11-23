@@ -1,7 +1,10 @@
-# Unreleased
+# 0.1.12
+
+* `cleanup` module to register resetting signals to default.
+
+# registry-1.2.0
 
 * `unregister_signal`, to remove all hooks of one signal.
-* `cleanup` module to register resetting signals to default.
 
 # 0.1.11
 
