@@ -161,6 +161,10 @@ pub use libc::{
     SIGWINCH,
 };
 
+#[cfg(not(any(target_os = "linux", windows)))]
+pub use libc::SIGINFO;
+
+
 #[cfg(windows)]
 pub use libc::{SIGABRT, SIGFPE, SIGILL, SIGINT, SIGSEGV, SIGTERM};
 

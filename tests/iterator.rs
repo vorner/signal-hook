@@ -67,3 +67,10 @@ fn signals_block_wait() {
         .expect_err("Wait didn't wait properly");
     assert_eq!(err, RecvTimeoutError::Timeout);
 }
+
+#[cfg(not(any(target_os = "linux", windows)))]
+use signal_hook::SIGINFO;
+#[test]
+fn siginfo_is_valid_signal() {
+    let _signal: Signals = Signals::new(&[SIGINFO]).unwrap();
+}

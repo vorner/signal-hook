@@ -1,3 +1,7 @@
+# latest
+
+* added support for `SIGINFO` on operating systems which support it.
+
 # 0.1.12
 
 * `cleanup` module to register resetting signals to default.
