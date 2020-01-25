@@ -6,7 +6,6 @@
 #![deny(missing_docs, warnings)]
 // Don't fail on links to things not enabled in features
 #![allow(unknown_lints, intra_doc_link_resolution_failure)]
-
 //! Library for easier and safe Unix signal handling
 //!
 //! Unix signals are inherently hard to handle correctly, for several reasons:
@@ -85,6 +84,16 @@
 //! It should work on any POSIX.1-2001 system, which are all the major big OSes with the notable
 //! exception of Windows.
 //!
+//! Non-standard signals are also supported. Pass the signal value directly from `libc` or use
+//! the numeric value directly.
+//!
+//! ```rust
+//! use std::sync::Arc;
+//! use std::sync::atomic::{AtomicBool};
+//! let term = Arc::new(AtomicBool::new(false));
+//! let _ = signal_hook::flag::register(libc::SIGINT, Arc::clone(&term));
+//! ```
+//!
 //! This crate includes a limited support for Windows, based on `signal`/`raise` in the CRT.
 //! There are differences in both API and behavior:
 //!
@@ -137,6 +146,7 @@
 //! * `tokio-support`: The [`Signals`](iterator/struct.Signals.html) can be turned into
 //!   [`Async`](iterator/struct.Async.html), which provides a `Stream` interface for integration in
 //!   the asynchronous world.
+
 
 #[cfg(feature = "tokio-support")]
 extern crate futures;
