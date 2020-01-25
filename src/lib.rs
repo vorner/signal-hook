@@ -1,5 +1,5 @@
 #![doc(
-    html_root_url = "https://docs.rs/signal-hook/0.1.12/signal-hook/",
+    html_root_url = "https://docs.rs/signal-hook/0.1.13/signal-hook/",
     test(attr(deny(warnings))),
     test(attr(allow(bare_trait_objects, unknown_lints)))
 )]
@@ -146,7 +146,6 @@
 //! * `tokio-support`: The [`Signals`](iterator/struct.Signals.html) can be turned into
 //!   [`Async`](iterator/struct.Async.html), which provides a `Stream` interface for integration in
 //!   the asynchronous world.
-
 
 #[cfg(feature = "tokio-support")]
 extern crate futures;

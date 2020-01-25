@@ -1,3 +1,7 @@
+# 0.1.13
+
+* Some doc clarifications.
+
 # 0.1.12
 
 * `cleanup` module to register resetting signals to default.
