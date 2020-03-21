@@ -134,6 +134,9 @@ pub(crate) fn wake(pipe: RawFd) {
 ///
 /// In this case, the pipe is taken as the `RawFd`. It is still the caller's responsibility to
 /// close it.
+///
+/// Note that passing the wrong file descriptor won't cause UB, but can still lead to severe bugs ‒
+/// like data corruptions in files.
 pub fn register_raw(signal: c_int, pipe: RawFd) -> Result<SigId, Error> {
     // A trick here:
     // We want to set the FD non-blocking. But it belongs to the caller. Therefore, we make our own
