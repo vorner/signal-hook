@@ -150,7 +150,7 @@
 #[cfg(feature = "tokio-support")]
 extern crate futures;
 extern crate libc;
-#[cfg(feature = "mio-support")]
+#[cfg(any(test, feature = "mio-support"))]
 extern crate mio;
 extern crate signal_hook_registry;
 #[cfg(feature = "tokio-support")]
