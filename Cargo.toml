@@ -26,11 +26,12 @@ members = [
 [dependencies]
 libc = "~0.2"
 futures = { version = "~0.1", optional = true }
-mio = { version = "~0.6", optional = true }
+mio = { version = "~0.7", features = ["os-util"], optional = true }
 signal-hook-registry = { version = "~1.2", path = "signal-hook-registry" }
 tokio-reactor = { version = "~0.1", optional = true }
 
 [dev-dependencies]
+mio = { version = "~0.7", features = ["os-poll", "os-util"] }
 version-sync = "~0.8"
 tokio = "~0.1"
 
