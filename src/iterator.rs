@@ -138,9 +138,10 @@ impl Drop for RegisteredSignals {
 ///
 /// # `mio` support
 ///
-/// If the crate is compiled with the `mio-support` flag, the `Signals` becomes pluggable into
-/// `mio` (it implements the `Source` trait). If it becomes readable, there may be new signals to
-/// pick up. The structure is expected to be registered with level triggered mode.
+/// If the crate is compiled with the `mio-support` or `mio-0_7-support` flags, the `Signals`
+/// becomes pluggable into `mio` (it implements the `Source` trait). If it becomes readable, there
+/// may be new signals to pick up. The structure is expected to be registered with level triggered
+/// mode.
 ///
 /// # `tokio` support
 ///
@@ -429,16 +430,82 @@ impl<'a> Iterator for Forever<'a> {
 
         None
     }
-}
 
-#[cfg(any(test, feature = "mio-support"))]
+}
+#[cfg(feature = "mio-support")]
 mod mio_support {
     use std::io::Error;
     use std::os::unix::io::AsRawFd;
 
-    use mio::event::Source;
-    use mio::unix::SourceFd;
-    use mio::{Registry, Interest, Token};
+    use mio::event::Evented;
+    use mio::unix::EventedFd;
+    use mio::{Poll, PollOpt, Ready, Token};
+
+    use super::Signals;
+
+    impl Evented for Signals {
+        fn register(
+            &self,
+            poll: &Poll,
+            token: Token,
+            interest: Ready,
+            opts: PollOpt,
+        ) -> Result<(), Error> {
+            EventedFd(&self.waker.read.as_raw_fd()).register(poll, token, interest, opts)
+        }
+
+        fn reregister(
+            &self,
+            poll: &Poll,
+            token: Token,
+            interest: Ready,
+            opts: PollOpt,
+        ) -> Result<(), Error> {
+            EventedFd(&self.waker.read.as_raw_fd()).reregister(poll, token, interest, opts)
+        }
+
+        fn deregister(&self, poll: &Poll) -> Result<(), Error> {
+            EventedFd(&self.waker.read.as_raw_fd()).deregister(poll)
+        }
+    }
+
+    #[cfg(test)]
+    mod tests {
+        use std::time::Duration;
+
+        use libc;
+        use mio::Events;
+
+        use super::*;
+
+        #[test]
+        fn mio_wakeup() {
+            let signals = Signals::new(&[::SIGUSR1]).unwrap();
+            let token = Token(0);
+            let poll = Poll::new().unwrap();
+            poll.register(&signals, token, Ready::readable(), PollOpt::level())
+                .unwrap();
+            let mut events = Events::with_capacity(10);
+            unsafe { libc::raise(::SIGUSR1) };
+            poll.poll(&mut events, Some(Duration::from_secs(10)))
+                .unwrap();
+            let event = events.iter().next().unwrap();
+            assert!(event.readiness().is_readable());
+            assert_eq!(token, event.token());
+            let sig = signals.pending().next().unwrap();
+            assert_eq!(::SIGUSR1, sig);
+        }
+    }
+}
+
+#[cfg(any(test, feature = "mio-0_7-support"))]
+mod mio_0_7_support {
+    use std::io::Error;
+    use std::os::unix::io::AsRawFd;
+
+    use mio_0_7::event::Source;
+    use mio_0_7::unix::SourceFd;
+    use mio_0_7::{Registry, Interest, Token};
 
     use super::Signals;
 
@@ -471,7 +538,7 @@ mod mio_support {
         use std::time::Duration;
 
         use libc;
-        use mio::{Events, Poll};
+        use mio_0_7::{Events, Poll};
 
         use super::*;
 
