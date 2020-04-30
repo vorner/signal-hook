@@ -16,7 +16,7 @@ maintenance = { status = "actively-developed" }
 [features]
 mio-support = ["mio"]
 mio-0_7-support = ["mio_0_7"]
-tokio-support = ["futures", "mio-support", "mio-0_7-support", "tokio-reactor"]
+tokio-support = ["futures", "mio-support", "tokio-reactor"]
 
 [workspace]
 members = [
