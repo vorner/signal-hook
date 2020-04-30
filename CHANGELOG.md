@@ -1,3 +1,7 @@
+# Unreleased
+
+* `mio-0_7-support` feature for use with mio 0.7.0+.
+
 # 0.1.13
 
 * Some doc clarifications.

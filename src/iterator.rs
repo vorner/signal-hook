@@ -139,9 +139,9 @@ impl Drop for RegisteredSignals {
 /// # `mio` support
 ///
 /// If the crate is compiled with the `mio-support` or `mio-0_7-support` flags, the `Signals`
-/// becomes pluggable into `mio` (it implements the `Source` trait). If it becomes readable, there
-/// may be new signals to pick up. The structure is expected to be registered with level triggered
-/// mode.
+/// becomes pluggable into `mio` version `0.6` or `0.7` respectively (it implements the `Source`
+/// trait). If it becomes readable, there may be new signals to pick up. The structure is expected
+/// to be registered with level triggered mode.
 ///
 /// # `tokio` support
 ///
