@@ -430,7 +430,6 @@ impl<'a> Iterator for Forever<'a> {
 
         None
     }
-
 }
 #[cfg(feature = "mio-support")]
 mod mio_support {
@@ -505,7 +504,7 @@ mod mio_0_7_support {
 
     use mio_0_7::event::Source;
     use mio_0_7::unix::SourceFd;
-    use mio_0_7::{Registry, Interest, Token};
+    use mio_0_7::{Interest, Registry, Token};
 
     use super::Signals;
 
@@ -547,11 +546,14 @@ mod mio_0_7_support {
             let mut signals = Signals::new(&[::SIGUSR1]).unwrap();
             let mut poll = Poll::new().unwrap();
             let token = Token(0);
-            poll.registry().register(&mut signals, token, Interest::READABLE).unwrap();
+            poll.registry()
+                .register(&mut signals, token, Interest::READABLE)
+                .unwrap();
 
             let mut events = Events::with_capacity(10);
             unsafe { libc::raise(::SIGUSR1) };
-            poll.poll(&mut events, Some(Duration::from_secs(10))).unwrap();
+            poll.poll(&mut events, Some(Duration::from_secs(10)))
+                .unwrap();
             let event = events.iter().next().unwrap();
 
             assert!(event.is_readable());

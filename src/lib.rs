@@ -154,7 +154,7 @@ extern crate futures;
 extern crate libc;
 #[cfg(feature = "mio-support")]
 extern crate mio;
-#[cfg(any(test, feature= "mio-0_7-support"))]
+#[cfg(any(test, feature = "mio-0_7-support"))]
 extern crate mio_0_7;
 extern crate signal_hook_registry;
 #[cfg(feature = "tokio-support")]
