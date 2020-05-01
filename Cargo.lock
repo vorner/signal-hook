@@ -435,7 +435,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 
 [[package]]
 name = "signal-hook"
-version = "0.1.13"
+version = "0.1.14"
 dependencies = [
  "futures 0.1.25 (registry+https://github.com/rust-lang/crates.io-index)",
  "libc 0.2.62 (registry+https://github.com/rust-lang/crates.io-index)",
@@ -453,7 +453,7 @@ version = "1.2.0"
 dependencies = [
  "arc-swap 0.4.2 (registry+https://github.com/rust-lang/crates.io-index)",
  "libc 0.2.62 (registry+https://github.com/rust-lang/crates.io-index)",
- "signal-hook 0.1.13",
+ "signal-hook 0.1.14",
  "version-sync 0.8.1 (registry+https://github.com/rust-lang/crates.io-index)",
 ]
 
