@@ -18,19 +18,4 @@ before_script:
 
 script:
     - |
-      export PATH="$PATH":~/.cargo/bin &&
-      export RUST_BACKTRACE=1 &&
-      export CARGO_INCREMENTAL=1 &&
-      rm -f Cargo.lock &&
-      (cd signal-hook-registry && cargo check) &&
-      (test "$TRAVIS_RUST_VERSION" == 1.26.0 || cargo build --all) &&
-      (test "$TRAVIS_RUST_VERSION" == 1.26.0 || cargo build --all --all-features) &&
-      (test "$TRAVIS_RUST_VERSION" == 1.26.0 || cargo test --all) &&
-      (test "$TRAVIS_RUST_VERSION" == 1.26.0 || cargo test --all --all-features) &&
-      (test "$TRAVIS_RUST_VERSION" == 1.26.0 || cargo doc --no-deps) &&
-      (test "$TRAVIS_RUST_VERSION" == 1.26.0 || cargo clippy --all --tests -- --deny clippy::all) &&
-      (test "$TRAVIS_RUST_VERSION" == 1.26.0 || cargo fmt)
-
-matrix:
-    allow_failures:
-        - rust: nightly
+      ./ci-check.sh
