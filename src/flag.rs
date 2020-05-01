@@ -147,7 +147,7 @@ use std::sync::Arc;
 
 use libc::c_int;
 
-use SigId;
+use crate::SigId;
 
 /// Registers an action to set the flag to `true` whenever the given signal arrives.
 pub fn register(signal: c_int, flag: Arc<AtomicBool>) -> Result<SigId, Error> {
@@ -155,12 +155,12 @@ pub fn register(signal: c_int, flag: Arc<AtomicBool>) -> Result<SigId, Error> {
     // * Signals should not come very often, so the performance does not really matter.
     // * We promise the order of actions, but setting different atomics with Relaxed or similar
     //   would not guarantee the effective order.
-    unsafe { ::register(signal, move || flag.store(true, Ordering::SeqCst)) }
+    unsafe { crate::register(signal, move || flag.store(true, Ordering::SeqCst)) }
 }
 
 /// Registers an action to set the flag to the given value whenever the signal arrives.
 pub fn register_usize(signal: c_int, flag: Arc<AtomicUsize>, value: usize) -> Result<SigId, Error> {
-    unsafe { ::register(signal, move || flag.store(value, Ordering::SeqCst)) }
+    unsafe { crate::register(signal, move || flag.store(value, Ordering::SeqCst)) }
 }
 
 #[cfg(test)]
@@ -168,16 +168,14 @@ mod tests {
     use std::sync::atomic;
     use std::time::{Duration, Instant};
 
-    use libc;
-
     use super::*;
 
     fn self_signal() {
         unsafe {
             #[cfg(not(windows))]
-            libc::raise(::SIGUSR1);
+            libc::raise(crate::SIGUSR1);
             #[cfg(windows)]
-            libc::raise(::SIGTERM);
+            libc::raise(crate::SIGTERM);
         }
     }
 
@@ -200,13 +198,13 @@ mod tests {
         // When we register the action, it is active.
         let flag = Arc::new(AtomicBool::new(false));
         #[cfg(not(windows))]
-        let signal = register(::SIGUSR1, Arc::clone(&flag)).unwrap();
+        let signal = register(crate::SIGUSR1, Arc::clone(&flag)).unwrap();
         #[cfg(windows)]
-        let signal = register(::SIGTERM, Arc::clone(&flag)).unwrap();
+        let signal = register(crate::SIGTERM, Arc::clone(&flag)).unwrap();
         self_signal();
         assert!(wait_flag(&flag));
         // But stops working after it is unregistered.
-        assert!(::unregister(signal));
+        assert!(crate::unregister(signal));
         flag.store(false, Ordering::Relaxed);
         self_signal();
         assert!(!wait_flag(&flag));

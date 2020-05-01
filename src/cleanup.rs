@@ -33,7 +33,7 @@ const SIG_DFL: sighandler_t = 0;
 
 pub use signal_hook_registry::unregister_signal;
 
-use SigId;
+use crate::SigId;
 
 /// Resets the signal handler to the default one.
 ///
@@ -202,5 +202,5 @@ pub fn register(signal: c_int, cleanup: Vec<c_int>) -> Result<SigId, Error> {
             cleanup_raw(*sig);
         }
     };
-    unsafe { ::register(signal, hook) }
+    unsafe { crate::register(signal, hook) }
 }

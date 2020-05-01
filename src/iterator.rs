@@ -60,8 +60,7 @@ use std::sync::{Arc, Mutex};
 
 use libc::{self, c_int};
 
-use pipe;
-use SigId;
+use crate::{pipe, SigId};
 
 /// Maximal signal number we support.
 const MAX_SIGNUM: usize = 128;
@@ -88,7 +87,7 @@ impl Drop for RegisteredSignals {
     fn drop(&mut self) {
         let lock = self.0.lock().unwrap();
         for id in lock.iter().filter_map(|s| *s) {
-            ::unregister(id);
+            crate::unregister(id);
         }
     }
 }
@@ -217,7 +216,7 @@ impl Signals {
             waker.pending[signal as usize].store(true, Ordering::SeqCst);
             waker.wake();
         };
-        let id = unsafe { ::register(signal, action) }?;
+        let id = unsafe { crate::register(signal, action) }?;
         lock[signal as usize] = Some(id);
         Ok(())
     }
@@ -479,20 +478,20 @@ mod mio_support {
 
         #[test]
         fn mio_wakeup() {
-            let signals = Signals::new(&[::SIGUSR1]).unwrap();
+            let signals = Signals::new(&[crate::SIGUSR1]).unwrap();
             let token = Token(0);
             let poll = Poll::new().unwrap();
             poll.register(&signals, token, Ready::readable(), PollOpt::level())
                 .unwrap();
             let mut events = Events::with_capacity(10);
-            unsafe { libc::raise(::SIGUSR1) };
+            unsafe { libc::raise(crate::SIGUSR1) };
             poll.poll(&mut events, Some(Duration::from_secs(10)))
                 .unwrap();
             let event = events.iter().next().unwrap();
             assert!(event.readiness().is_readable());
             assert_eq!(token, event.token());
             let sig = signals.pending().next().unwrap();
-            assert_eq!(::SIGUSR1, sig);
+            assert_eq!(crate::SIGUSR1, sig);
         }
     }
 }
@@ -536,14 +535,13 @@ mod mio_0_7_support {
     mod tests {
         use std::time::Duration;
 
-        use libc;
         use mio_0_7::{Events, Poll};
 
         use super::*;
 
         #[test]
         fn mio_wakeup() {
-            let mut signals = Signals::new(&[::SIGUSR1]).unwrap();
+            let mut signals = Signals::new(&[crate::SIGUSR1]).unwrap();
             let mut poll = Poll::new().unwrap();
             let token = Token(0);
             poll.registry()
@@ -551,7 +549,7 @@ mod mio_0_7_support {
                 .unwrap();
 
             let mut events = Events::with_capacity(10);
-            unsafe { libc::raise(::SIGUSR1) };
+            unsafe { libc::raise(crate::SIGUSR1) };
             poll.poll(&mut events, Some(Duration::from_secs(10)))
                 .unwrap();
             let event = events.iter().next().unwrap();
@@ -559,7 +557,7 @@ mod mio_0_7_support {
             assert!(event.is_readable());
             assert_eq!(token, event.token());
             let sig = signals.pending().next().unwrap();
-            assert_eq!(::SIGUSR1, sig);
+            assert_eq!(crate::SIGUSR1, sig);
         }
     }
 }
