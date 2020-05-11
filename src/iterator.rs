@@ -139,8 +139,7 @@ impl Drop for RegisteredSignals {
 ///
 /// If the crate is compiled with the `mio-support` or `mio-0_7-support` flags, the `Signals`
 /// becomes pluggable into `mio` version `0.6` or `0.7` respectively (it implements the `Source`
-/// trait). If it becomes readable, there may be new signals to pick up. The structure is expected
-/// to be registered with level triggered mode.
+/// trait). If it becomes readable, there may be new signals to pick up.
 ///
 /// # `tokio` support
 ///
@@ -244,6 +243,19 @@ impl Signals {
                 if wait { 0 } else { libc::MSG_DONTWAIT },
             )
         };
+
+        if res > 0 {
+            unsafe {
+                // Finish draining the data in case there's more
+                while libc::recv(
+                    self.waker.read.as_raw_fd(),
+                    buff.as_mut_ptr() as *mut libc::c_void,
+                    SIZE,
+                    libc::MSG_DONTWAIT,
+                ) > 0
+                {}
+            }
+        }
 
         if self.waker.closed.load(Ordering::SeqCst) {
             // Wake any other sleeping ends

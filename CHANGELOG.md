@@ -1,3 +1,9 @@
+# 0.1.15
+
+* Make `Signals` work in edge-triggered mode in mio too, by always draining
+  everything from the socket. Needed, because mio 0.7 doesn't have
+  level-triggered any more.
+
 # 0.1.14
 
 * `mio-0_7-support` feature for use with mio 0.7.0+.
