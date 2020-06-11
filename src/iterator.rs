@@ -708,3 +708,91 @@ mod tokio_support {
 
 #[cfg(feature = "tokio-support")]
 pub use self::tokio_support::Async;
+
+#[cfg(feature = "futures-0_3-support")]
+mod future_3_0_support {
+    use core::pin::Pin;
+    use core::task::{Context, Poll};
+
+    use std::ops::DerefMut;
+    use std::sync::atomic::Ordering;
+
+    use futures_0_3::{AsyncRead, stream::Stream};
+
+    use libc::c_int;
+
+    use super::Signals;
+
+    /// TODO
+    pub struct StreamAdapter<T> {
+        inner: Signals,
+        async_read: T,
+        position: usize
+    }
+
+    /// TODO
+    impl<T: AsyncRead + Unpin> StreamAdapter<T> {
+        pub(crate) fn new(signals: Signals, async_read: T) -> StreamAdapter<T> {
+            Self {
+                inner: signals,
+                async_read,
+                position: 0
+            }
+        }
+    }
+
+    /// TODO
+    impl<T: AsyncRead + Unpin> Stream for StreamAdapter<T> {
+        type Item = libc::c_int;
+
+        fn poll_next(mut self: Pin<&mut Self>, ctx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
+            while !self.inner.is_closed() {
+                if self.position >= self.inner.waker.pending.len() {
+                    if Pin::new(&mut self.async_read).poll_read(ctx, &mut [0u8]).is_pending() {
+                        return Poll::Pending;
+                    }
+
+                    self.inner.flush(false);
+
+                    self.position = 0;
+                }
+
+                assert!(self.position < self.inner.waker.pending.len());
+
+                let mut this = self.deref_mut();
+                let sig = &this.inner.waker.pending[this.position];
+                let sig_num = this.position;
+                this.position += 1;
+                if sig
+                    .compare_exchange(true, false, Ordering::SeqCst, Ordering::Relaxed)
+                    .is_ok()
+                {
+                    return Poll::Ready(Some(sig_num as c_int));
+                }
+            }
+
+            Poll::Ready(None)
+        }
+    }
+}
+
+#[cfg(feature = "smol-support")]
+mod smol_support {
+    use std::io::Result as IoResult;
+
+    use std::os::unix::net::UnixStream;
+
+    use smol::Async;
+
+    use super::Signals;
+
+    use super::future_3_0_support::StreamAdapter;
+
+    impl Signals {
+        /// TODO
+        pub fn into_stream(self) -> IoResult<StreamAdapter<Async<UnixStream>>> {
+            let smol_async = Async::new(self.waker.read.try_clone()?)?;
+            Ok(StreamAdapter::new(self, smol_async))
+        }
+    }
+}

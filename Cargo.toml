@@ -18,6 +18,8 @@ maintenance = { status = "actively-developed" }
 mio-support = ["mio"]
 mio-0_7-support = ["mio_0_7"]
 tokio-support = ["futures", "mio-support", "tokio-reactor"]
+futures-0_3-support = ["futures_0_3"]
+smol-support = ["smol", "futures-0_3-support"]
 
 [workspace]
 members = [
@@ -28,10 +30,12 @@ members = [
 [dependencies]
 libc = "~0.2"
 futures = { version = "~0.1", optional = true }
+futures_0_3 = { package = "futures", version = "~0.3", optional = true }
 mio_0_7 = { package = "mio", version = "~0.7", features = ["os-util"], optional = true }
 mio = { version = "~0.6", optional = true }
 signal-hook-registry = { version = "~1.2", path = "signal-hook-registry" }
 tokio-reactor = { version = "~0.1", optional = true }
+smol = { version = "~0.1", optional = true }
 
 [dev-dependencies]
 mio_0_7 = { package ="mio", version = "~0.7", features = ["os-poll", "os-util"] }

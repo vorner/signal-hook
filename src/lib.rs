@@ -148,6 +148,9 @@
 //! * `tokio-support`: The [`Signals`](iterator/struct.Signals.html) can be turned into
 //!   [`Async`](iterator/struct.Async.html), which provides a `Stream` interface for integration in
 //!   the asynchronous world.
+//! * `smol-support`: The [`Signals`](iterator/struct.Signals.html) can be turned into an
+//!   asynchronous [`Stream`](https://docs.rs/futures/0.3.5/futures/stream/trait.Stream.html)
+//!   instance for integration with smol runtime.
 
 #[cfg(feature = "tokio-support")]
 extern crate futures;
@@ -159,6 +162,10 @@ extern crate mio_0_7;
 extern crate signal_hook_registry;
 #[cfg(feature = "tokio-support")]
 extern crate tokio_reactor;
+#[cfg(feature = "futures-0_3-support")]
+extern crate futures_0_3;
+#[cfg(feature = "smol-support")]
+extern crate smol;
 
 pub mod cleanup;
 pub mod flag;
