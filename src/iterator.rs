@@ -723,16 +723,36 @@ mod future_3_0_support {
 
     use super::Signals;
 
-    /// TODO
+    /// An asynchronous stream of registered signals.
+    ///
+    /// It is created by converting [`Signals`](struct.Signals.html). See
+    /// [`Signals::into_stream`](struct.Signals.html#method.into_stream).
+    ///
+    /// # Cloning
+    ///
+    /// If you register multiple signals, then create multiple `Signals` instances by cloning and
+    /// convert them to `StreamAdapter`, one of them can „steal“ wakeups for several signals at
+    /// once. This one will produce the signals while the others will be silent.
+    ///
+    /// This has an effect if the one consumes them slowly or is dropped after the first one.
+    ///
+    /// It is recommended not to clone the `Signals` instances and keep just one `StreamAdapter`
+    /// stream around.
     pub struct StreamAdapter<T> {
         inner: Signals,
         async_read: T,
         position: usize
     }
 
-    /// TODO
     impl<T: AsyncRead + Unpin> StreamAdapter<T> {
-        pub(crate) fn new(signals: Signals, async_read: T) -> StreamAdapter<T> {
+        /// Creates a new `StreamAdapter` instance.
+        ///
+        /// The `Signals` argument is used to flush the pipe and retrieve the pending
+        /// signals. The `AsyncRead` argument is used to asynchronously wait until the
+        /// reading end of the pipe contains some bytes. The client code must construct
+        /// an instance of this trait which schedules the read file descriptor in an
+        /// arbitrary async reactor for reading events.
+        pub fn new(signals: Signals, async_read: T) -> StreamAdapter<T> {
             Self {
                 inner: signals,
                 async_read,
@@ -741,7 +761,6 @@ mod future_3_0_support {
         }
     }
 
-    /// TODO
     impl<T: AsyncRead + Unpin> Stream for StreamAdapter<T> {
         type Item = libc::c_int;
 
@@ -776,9 +795,12 @@ mod future_3_0_support {
     }
 }
 
+#[cfg(feature = "futures-0_3-support")]
+pub use self::future_3_0_support::StreamAdapter;
+
 #[cfg(feature = "smol-support")]
 mod smol_support {
-    use std::io::Result as IoResult;
+    use std::io::Error;
 
     use std::os::unix::net::UnixStream;
 
@@ -789,8 +811,46 @@ mod smol_support {
     use super::future_3_0_support::StreamAdapter;
 
     impl Signals {
-        /// TODO
-        pub fn into_stream(self) -> IoResult<StreamAdapter<Async<UnixStream>>> {
+        /// Turns the signals object into an asynchronous stream.
+        ///
+        /// The reading end of the self pipe is registered with smol. This allows to await signals
+        /// in an asynchronous manner from any future. Available only if compiled with the
+        /// `smol-support` feature enabled.
+        ///
+        /// # Examples
+        ///
+        /// ```rust
+        /// extern crate futures_0_3 as futures;
+        /// extern crate libc;
+        /// extern crate signal_hook;
+        /// extern crate smol;
+        ///
+        /// use std::io::Error;
+        ///
+        /// use futures::stream::StreamExt;
+        ///
+        /// use signal_hook::iterator::Signals;
+        ///
+        /// async fn await_signals() -> Result<(), Error> {
+        ///     let mut signals = Signals::new(&[signal_hook::SIGUSR1])?
+        ///         .into_stream()?;
+        ///
+        ///     let send_sig = smol::Task::spawn(async {
+        ///         unsafe { libc::raise(signal_hook::SIGUSR1) };
+        ///     });
+        ///
+        ///     let (signal, _) = futures::join!(signals.next(), send_sig);
+        ///
+        ///     assert_eq!(signal.unwrap(), signal_hook::SIGUSR1);
+        ///
+        ///     Ok(())
+        /// }
+        ///
+        /// fn main() -> Result<(), Error> {
+        ///     smol::run(await_signals())
+        /// }
+        /// ```
+        pub fn into_stream(self) -> Result<StreamAdapter<Async<UnixStream>>, Error> {
             let smol_async = Async::new(self.waker.read.try_clone()?)?;
             Ok(StreamAdapter::new(self, smol_async))
         }
