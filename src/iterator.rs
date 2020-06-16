@@ -60,7 +60,7 @@ use std::sync::{Arc, Mutex};
 
 use libc::{self, c_int};
 
-use crate::{pipe, SigId};
+use crate::SigId;
 
 /// Maximal signal number we support.
 const MAX_SIGNUM: usize = 128;
@@ -76,7 +76,19 @@ struct Waker {
 impl Waker {
     /// Sends a wakeup signal to the internal wakeup pipe.
     fn wake(&self) {
-        pipe::wake(self.write.as_raw_fd());
+        unsafe {
+            // See the comment at pipe::write.
+            //
+            // We don't use pipe::write, because it expects the FD to be already in non-blocking
+            // mode. That's because it needs to support actual pipes. We can afford send here,
+            // which has flags.
+            libc::send(
+                self.write.as_raw_fd(),
+                b"X" as *const _ as *const _,
+                1,
+                libc::MSG_DONTWAIT,
+            );
+        }
     }
 }
 
