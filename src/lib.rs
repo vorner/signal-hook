@@ -1,5 +1,5 @@
 #![doc(
-    html_root_url = "https://docs.rs/signal-hook/0.1.15/signal-hook/",
+    html_root_url = "https://docs.rs/signal-hook/0.1.16/signal-hook/",
     test(attr(deny(warnings))),
     test(attr(allow(bare_trait_objects, unknown_lints)))
 )]

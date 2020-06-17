@@ -1,3 +1,7 @@
+# 0.1.16
+
+* Fix possible blocking in signal handler registered by `Signals`.
+
 # 0.1.15
 
 * Make `Signals` work in edge-triggered mode in mio too, by always draining
