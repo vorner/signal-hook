@@ -30,6 +30,10 @@ fn signals_close_forever() {
         })
     });
 
+    // The map method is lazy and will execute the function only during iteration. So we
+    // collect the JoinHandles to ensure the threads are actually started.
+    let threads: Vec<thread::JoinHandle<()>> = threads.collect();
+
     // Wait a bit… if some thread terminates by itself.
     thread::sleep(Duration::from_millis(100));
     assert!(!stopped.load(Ordering::SeqCst));
