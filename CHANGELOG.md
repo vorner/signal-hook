@@ -1,3 +1,6 @@
+* (Breaking) `pipe::register_raw` now takes ownership and tries to use send
+  first, falls back to `O_NONBLOCK` and `write` on failure.
+
 # 0.1.16
 
 * Fix possible blocking in signal handler registered by `Signals`.
