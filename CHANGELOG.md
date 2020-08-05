@@ -1,3 +1,6 @@
+* Abort instead of panicking if the OS gives us NULL as siginfo (which is
+  illegal). Panicking would be UB.
+
 # 0.1.16
 
 * Fix possible blocking in signal handler registered by `Signals`.

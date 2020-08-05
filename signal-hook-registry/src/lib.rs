@@ -290,7 +290,20 @@ extern "C" fn handler(sig: c_int, info: *mut siginfo_t, data: *mut c_void) {
             }
         }
 
-        let info = unsafe { info.as_ref().unwrap() };
+        let info = unsafe { info.as_ref() };
+        let info = info.unwrap_or_else(|| {
+            // The info being null seems to be illegal according to POSIX, but has been observed on
+            // some probably broken platform. We can't do anything about that, that is just broken,
+            // but we are not allowed to panic in a signal handler, so we are left only with simply
+            // aborting. We try to write a message what happens, but using the libc stuff
+            // (`eprintln` is not guaranteed to be async-signal-safe).
+            unsafe {
+                const MSG: &[u8] =
+                    b"Platform broken, got NULL as siginfo to signal handler. Aborting";
+                libc::write(2, MSG.as_ptr() as *const _, MSG.len());
+                libc::abort();
+            }
+        });
 
         for action in slot.actions.values() {
             action(info);
