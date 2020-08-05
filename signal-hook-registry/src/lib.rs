@@ -3,7 +3,7 @@
     test(attr(deny(warnings)))
 )]
 #![deny(missing_docs, warnings)]
-#![allow(unknown_lints, bare_trait_objects)]
+#![allow(unknown_lints, renamed_and_remove_lints, bare_trait_objects)]
 
 //! Backend of the [signal-hook] crate.
 //!
