@@ -1,3 +1,5 @@
+# registry-1.2.1
+
 * Abort instead of panicking if the OS gives us NULL as siginfo (which is
   illegal). Panicking would be UB.
 
