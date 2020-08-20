@@ -74,16 +74,25 @@
 //!     Ok(())
 //! }
 
-use std::io::Error;
-use std::os::unix::io::{AsRawFd, RawFd};
+use std::io::{Error, ErrorKind};
+use std::os::unix::io::{AsRawFd, IntoRawFd, RawFd};
 
 use libc::{self, c_int};
 
 use crate::SigId;
 
-struct OwnedFd(RawFd);
+#[derive(Copy, Clone)]
+pub(crate) enum WakeMethod {
+    Send,
+    Write,
+}
 
-impl OwnedFd {
+struct WakeFd {
+    fd: RawFd,
+    method: WakeMethod,
+}
+
+impl WakeFd {
     /// Sets close on exec and nonblock on the inner file descriptor.
     fn set_flags(&self) -> Result<(), Error> {
         unsafe {
@@ -98,23 +107,26 @@ impl OwnedFd {
         }
         Ok(())
     }
-}
-
-impl AsRawFd for OwnedFd {
-    fn as_raw_fd(&self) -> RawFd {
-        self.0
+    fn wake(&self) {
+        wake(self.fd, self.method);
     }
 }
 
-impl Drop for OwnedFd {
+impl AsRawFd for WakeFd {
+    fn as_raw_fd(&self) -> RawFd {
+        self.fd
+    }
+}
+
+impl Drop for WakeFd {
     fn drop(&mut self) {
         unsafe {
-            libc::close(self.0);
+            libc::close(self.fd);
         }
     }
 }
 
-pub(crate) fn wake(pipe: RawFd) {
+pub(crate) fn wake(pipe: RawFd, method: WakeMethod) {
     unsafe {
         // This writes some data into the pipe.
         //
@@ -126,28 +138,54 @@ pub(crate) fn wake(pipe: RawFd) {
         //   if it is closed. The second is EAGAIN, in which case the pipe is full ‒ there were
         //   many signals, but the reader didn't have time to read the data yet. It'll still get
         //   woken up, so not fitting another letter in it is fine.
-        libc::write(pipe, b"X" as *const _ as *const _, 1);
+        let data = b"X" as *const _ as *const _;
+        match method {
+            WakeMethod::Write => libc::write(pipe, data, 1),
+            WakeMethod::Send => libc::send(pipe, data, 1, libc::MSG_DONTWAIT),
+        };
     }
 }
 
 /// Registers a write to a self-pipe whenever there's the signal.
 ///
-/// In this case, the pipe is taken as the `RawFd`. It is still the caller's responsibility to
-/// close it.
+/// In this case, the pipe is taken as the `RawFd`. It'll be closed on deregistration. Effectively,
+/// the function takes ownership of the file descriptor. This includes feeling free to set arbitrary
+/// flags on it, including file status flags (that are shared across file descriptors created by
+/// `dup`).
 ///
 /// Note that passing the wrong file descriptor won't cause UB, but can still lead to severe bugs ‒
-/// like data corruptions in files.
+/// like data corruptions in files. Prefer using [`register`] if possible.
+///
+/// Also, it is perfectly legal for multiple writes to be collated together (if not consumed) and
+/// to generate spurious wakeups (but will not generate spurious *bytes* in the pipe).
+///
+/// # Internal details
+///
+/// Internally, it *currently* does following. Note that this is *not* part of the stability
+/// guarantees and may change if necessary.
+///
+/// * If the file descriptor can be used with [`send`][libc::send], it'll be used together with
+///   [`MSG_DONTWAIT`][libc::MSG_DONTWAIT]. This is tested by sending `0` bytes of data (depending
+///   on the socket type, this might wake the read end with an empty message).
+/// * If it is not possible, the [`O_NONBLOCK`][libc::O_NONBLOCK] will be set on the file
+///   descriptor and [`write`][libc::write] will be used instead.
 pub fn register_raw(signal: c_int, pipe: RawFd) -> Result<SigId, Error> {
-    // A trick here:
-    // We want to set the FD non-blocking. But it belongs to the caller. Therefore, we make our own
-    // copy with `dup` to play on instead.
-    let duped = unsafe { libc::dup(pipe) };
-    if duped == -1 {
-        return Err(Error::last_os_error());
-    }
-    let duped = OwnedFd(duped);
-    duped.set_flags()?;
-    let action = move || wake(duped.as_raw_fd());
+    let res = unsafe { libc::send(pipe, &[] as *const _, 0, libc::MSG_DONTWAIT) };
+    let fd = match (res, Error::last_os_error().kind()) {
+        (0, _) | (-1, ErrorKind::WouldBlock) => WakeFd {
+            fd: pipe,
+            method: WakeMethod::Send,
+        },
+        _ => {
+            let fd = WakeFd {
+                fd: pipe,
+                method: WakeMethod::Write,
+            };
+            fd.set_flags()?;
+            fd
+        }
+    };
+    let action = move || fd.wake();
     unsafe { crate::register(signal, action) }
 }
 
@@ -157,14 +195,13 @@ pub fn register_raw(signal: c_int, pipe: RawFd) -> Result<SigId, Error> {
 ///
 /// Note that if you want to register the same pipe for multiple signals, there's `try_clone`
 /// method on many unix socket primitives.
+///
+/// See [`register_raw`] for further details.
 pub fn register<P>(signal: c_int, pipe: P) -> Result<SigId, Error>
 where
-    P: AsRawFd + Send + Sync + 'static,
+    P: IntoRawFd + 'static,
 {
-    let id = register_raw(signal, pipe.as_raw_fd())?;
-    // Close the original
-    drop(pipe);
-    Ok(id)
+    register_raw(signal, pipe.into_raw_fd())
 }
 
 #[cfg(test)]
@@ -199,27 +236,25 @@ mod tests {
         read.set_nonblocking(true)?;
         wakeup();
         let mut buff = [0; 1];
-        read.recv(&mut buff)?;
-        assert_eq!(b"X", &buff);
-        Ok(())
+        // The attempt to detect if it is socket can generate an empty message. Therefore, do a few
+        // retries.
+        for _ in 0..3 {
+            let len = read.recv(&mut buff)?;
+            if len == 1 && &buff == b"X" {
+                return Ok(());
+            }
+        }
+        panic!("Haven't received the right data");
     }
 
     #[test]
     fn register_with_pipe() -> Result<(), Error> {
         let mut fds = [0; 2];
         unsafe { assert_eq!(0, libc::pipe(fds.as_mut_ptr())) };
-        let read = OwnedFd(fds[0]);
-        let write = OwnedFd(fds[1]);
-        register(libc::SIGUSR1, write)?;
-        read.set_flags()?;
+        register_raw(libc::SIGUSR1, fds[1])?;
         wakeup();
         let mut buff = [0; 1];
-        unsafe {
-            assert_eq!(
-                1,
-                libc::read(read.as_raw_fd(), buff.as_mut_ptr() as *mut _, 1)
-            )
-        }
+        unsafe { assert_eq!(1, libc::read(fds[0], buff.as_mut_ptr() as *mut _, 1)) }
         assert_eq!(b"X", &buff);
         Ok(())
     }
