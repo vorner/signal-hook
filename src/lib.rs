@@ -3,7 +3,7 @@
     test(attr(deny(warnings))),
     test(attr(allow(bare_trait_objects, unknown_lints)))
 )]
-#![deny(missing_docs, warnings)]
+#![warn(missing_docs)]
 // Don't fail on links to things not enabled in features
 #![allow(
     unknown_lints,

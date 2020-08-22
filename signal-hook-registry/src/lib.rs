@@ -2,7 +2,7 @@
     html_root_url = "https://docs.rs/signal-hook-registry/1.2.1/signal-hook-registry/",
     test(attr(deny(warnings)))
 )]
-#![deny(missing_docs, warnings)]
+#![warn(missing_docs)]
 #![allow(unknown_lints, renamed_and_remove_lints, bare_trait_objects)]
 
 //! Backend of the [signal-hook] crate.

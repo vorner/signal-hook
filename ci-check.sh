@@ -26,6 +26,8 @@ if [ "$TRAVIS_RUST_VERSION" = 1.31.0 ] ; then
 	exit
 fi
 
+export RUSTFLAGS="-D warnings"
+
 cargo build --all --all-features
 cargo test --all --all-features
 cargo test --all
