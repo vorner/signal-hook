@@ -1,3 +1,6 @@
+* (Breaking) `pipe::register_raw` now takes ownership and tries to use send
+  first, falls back to `O_NONBLOCK` and `write` on failure.
+
 # registry-1.2.1
 
 * Abort instead of panicking if the OS gives us NULL as siginfo (which is
