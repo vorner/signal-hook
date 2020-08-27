@@ -61,8 +61,9 @@
 //! [signal-hook]: https://docs.rs/signal-hook
 //! [async-signal-safe]: http://www.man7.org/linux/man-pages/man7/signal-safety.7.html
 
-extern crate arc_swap;
 extern crate libc;
+
+mod half_lock;
 
 use std::collections::hash_map::Entry;
 use std::collections::{BTreeMap, HashMap};
@@ -74,11 +75,10 @@ use std::ptr;
 // yet.
 #[allow(deprecated)]
 use std::sync::ONCE_INIT;
-use std::sync::{Arc, Mutex, MutexGuard, Once};
+use std::sync::{Arc, Once};
 
-use arc_swap::IndependentArcSwap;
 #[cfg(not(windows))]
-use libc::{c_int, c_void, sigaction, siginfo_t, sigset_t, SIG_BLOCK, SIG_SETMASK};
+use libc::{c_int, c_void, sigaction, siginfo_t};
 #[cfg(windows)]
 use libc::{c_int, sighandler_t};
 
@@ -87,12 +87,16 @@ use libc::{SIGFPE, SIGILL, SIGKILL, SIGSEGV, SIGSTOP};
 #[cfg(windows)]
 use libc::{SIGFPE, SIGILL, SIGSEGV};
 
+use half_lock::HalfLock;
+
 // These constants are not defined in the current version of libc, but it actually
 // exists in Windows CRT.
 #[cfg(windows)]
 const SIG_DFL: sighandler_t = 0;
 #[cfg(windows)]
 const SIG_IGN: sighandler_t = 1;
+#[cfg(windows)]
+const SIG_GET: sighandler_t = 2;
 #[cfg(windows)]
 const SIG_ERR: sighandler_t = !0;
 
@@ -115,7 +119,7 @@ struct siginfo_t;
 // that way the one deallocating is the modification routine, outside of the signal handler.
 
 #[derive(Copy, Clone, Debug, Eq, PartialEq, Ord, PartialOrd, Hash)]
-struct ActionId(u64);
+struct ActionId(u128);
 
 /// An ID of registered action.
 ///
@@ -127,17 +131,14 @@ pub struct SigId {
     action: ActionId,
 }
 
-// This should be dyn Fn(...), but we want to support Rust 1.26.0 and that one doesn't allow them
+// This should be dyn Fn(...), but we want to support Rust 1.26.0 and that one doesn't allow dyn
 // yet.
 #[allow(unknown_lints, bare_trait_objects)]
 type Action = Fn(&siginfo_t) + Send + Sync;
 
 #[derive(Clone)]
 struct Slot {
-    #[cfg(windows)]
-    prev: sighandler_t,
-    #[cfg(not(windows))]
-    prev: sigaction,
+    prev: Prev,
     // We use BTreeMap here, because we want to run the actions in the order they were inserted.
     // This works, because the ActionIds are assigned in an increasing order.
     actions: BTreeMap<ActionId, Arc<Action>>,
@@ -151,7 +152,10 @@ impl Slot {
             return Err(Error::last_os_error());
         }
         Ok(Slot {
-            prev: old,
+            prev: Prev {
+                signal,
+                info: old,
+            },
             actions: BTreeMap::new(),
         })
     }
@@ -177,17 +181,110 @@ impl Slot {
             return Err(Error::last_os_error());
         }
         Ok(Slot {
-            prev: old,
+            prev: Prev {
+                signal,
+                info: old,
+            },
             actions: BTreeMap::new(),
         })
     }
 }
 
-type AllSignals = HashMap<c_int, Slot>;
+#[derive(Clone)]
+struct SignalData {
+    signals: HashMap<c_int, Slot>,
+    next_id: u128,
+}
 
+#[derive(Clone)]
+struct Prev {
+    signal: c_int,
+    #[cfg(windows)]
+    info: sighandler_t,
+    #[cfg(not(windows))]
+    info: sigaction,
+}
+
+impl Prev {
+    #[cfg(windows)]
+    fn detect(signal: c_int) -> Result<Self, Error> {
+        let old = unsafe { libc::signal(signal, SIG_GET) };
+        if old == SIG_ERR {
+            return Err(Error::last_os_error());
+        }
+        Ok(Prev {
+            signal,
+            info: old,
+        })
+    }
+
+    #[cfg(not(windows))]
+    fn detect(signal: c_int) -> Result<Self, Error> {
+        // C data structure, expected to be zeroed out.
+        let mut old: libc::sigaction = unsafe { mem::zeroed() };
+        // FFI ‒ pointers are valid, it doesn't take ownership.
+        if unsafe { libc::sigaction(signal, ptr::null(), &mut old) } != 0 {
+            return Err(Error::last_os_error());
+        }
+
+        Ok(Prev {
+            signal,
+            info: old,
+        })
+    }
+
+    #[cfg(windows)]
+    fn execute(&self, sig: c_int) {
+        let fptr = self.info;
+        if fptr != 0 && fptr != SIG_DFL && fptr != SIG_IGN {
+            // FFI ‒ calling the original signal handler.
+            unsafe {
+                let action = mem::transmute::<usize, extern "C" fn(c_int)>(fptr);
+                action(sig);
+            }
+        }
+    }
+
+    #[cfg(not(windows))]
+    unsafe fn execute(&self, sig: c_int, info: *mut siginfo_t, data: *mut c_void) {
+        let fptr = self.info.sa_sigaction;
+        if fptr != 0 && fptr != libc::SIG_DFL && fptr != libc::SIG_IGN {
+            // Android is broken and uses different int types than the rest (and different
+            // depending on the pointer width). This converts the flags to the proper type no
+            // matter what it is on the given platform.
+            //
+            // The trick is to create the same-typed variable as the sa_flags first and then
+            // set it to the proper value (does Rust have a way to copy a type in a different
+            // way?)
+            #[allow(unused_assignments)]
+            let mut siginfo = self.info.sa_flags;
+            siginfo = libc::SA_SIGINFO as _;
+            if self.info.sa_flags & siginfo == 0 {
+                let action = mem::transmute::<usize, extern "C" fn(c_int)>(fptr);
+                action(sig);
+            } else {
+                type SigAction = extern "C" fn(c_int, *mut siginfo_t, *mut c_void);
+                let action = mem::transmute::<usize, SigAction>(fptr);
+                action(sig, info, data);
+            }
+        }
+    }
+}
+
+/// Lazy-initiated data structure with our global variables.
+///
+/// Used inside a structure to cut down on boilerplate code to lazy-initialize stuff. We don't dare
+/// use anything fancy like lazy-static or once-cell, since we are not sure they are
+/// async-signal-safe in their access. Our code uses the [Once], but only on the write end outside
+/// of signal handler. The handler assumes it has already been initialized.
 struct GlobalData {
-    all_signals: IndependentArcSwap<AllSignals>,
-    rcu_lock: Mutex<u64>,
+    /// The data structure describing what needs to be run for each signal.
+    data: HalfLock<SignalData>,
+
+    /// A fallback to fight/minimize a race condition during signal initialization.
+    ///
+    /// See the comment inside [`register_unchecked_impl`].
+    race_fallback: HalfLock<Option<Prev>>,
 }
 
 static mut GLOBAL_DATA: Option<GlobalData> = None;
@@ -201,22 +298,14 @@ impl GlobalData {
     fn ensure() -> &'static Self {
         GLOBAL_INIT.call_once(|| unsafe {
             GLOBAL_DATA = Some(GlobalData {
-                all_signals: IndependentArcSwap::from_pointee(HashMap::new()),
-                rcu_lock: Mutex::new(0),
+                data: HalfLock::new(SignalData {
+                    signals: HashMap::new(),
+                    next_id: 1,
+                }),
+                race_fallback: HalfLock::new(None),
             });
         });
         Self::get()
-    }
-    fn load(&self) -> (AllSignals, MutexGuard<u64>) {
-        let lock = self.rcu_lock.lock().unwrap();
-        let signals = AllSignals::clone(&self.all_signals.load());
-        (signals, lock)
-    }
-    fn store(&self, signals: AllSignals, lock: MutexGuard<u64>) {
-        let signals = Arc::new(signals);
-        // We are behind a mutex, so we can safely replace it without any RCU on the ArcSwap side.
-        self.all_signals.store(signals);
-        drop(lock);
     }
 }
 
@@ -242,53 +331,36 @@ extern "C" fn handler(sig: c_int) {
         }
     }
 
-    let signals = GlobalData::get().all_signals.load_signal_safe();
+    let globals = GlobalData::get();
+    let fallback = globals.race_fallback.read();
+    let sigdata = globals.data.read();
 
-    if let Some(ref slot) = signals.get(&sig) {
-        let fptr = slot.prev;
-        if fptr != 0 && fptr != SIG_DFL && fptr != SIG_IGN {
-            // FFI ‒ calling the original signal handler.
-            unsafe {
-                let action = mem::transmute::<usize, extern "C" fn(c_int)>(fptr);
-                action(sig);
-            }
-        }
+    if let Some(ref slot) = sigdata.signals.get(&sig) {
+        slot.prev.execute(sig);
 
         for action in slot.actions.values() {
             action(&siginfo_t);
         }
+    } else if let Some(prev) = fallback.as_ref() {
+        // In case we get called but don't have the slot for this signal set up yet, we are under
+        // the race condition. We may have the old signal handler stored in the fallback
+        // temporarily.
+        if sig == prev.signal {
+            prev.execute(sig);
+        }
+        // else -> probably should not happen, but races with other threads are possible so
+        // better safe
     }
 }
 
 #[cfg(not(windows))]
 extern "C" fn handler(sig: c_int, info: *mut siginfo_t, data: *mut c_void) {
-    let signals = GlobalData::get().all_signals.load_signal_safe();
+    let globals = GlobalData::get();
+    let fallback = globals.race_fallback.read();
+    let sigdata = globals.data.read();
 
-    if let Some(ref slot) = signals.get(&sig) {
-        let fptr = slot.prev.sa_sigaction;
-        if fptr != 0 && fptr != libc::SIG_DFL && fptr != libc::SIG_IGN {
-            // FFI ‒ calling the original signal handler.
-            unsafe {
-                // Android is broken and uses different int types than the rest (and different
-                // depending on the pointer width). This converts the flags to the proper type no
-                // matter what it is on the given platform.
-                //
-                // The trick is to create the same-typed variable as the sa_flags first and then
-                // set it to the proper value (does Rust have a way to copy a type in a different
-                // way?)
-                #[allow(unused_assignments)]
-                let mut siginfo = slot.prev.sa_flags;
-                siginfo = libc::SA_SIGINFO as _;
-                if slot.prev.sa_flags & siginfo == 0 {
-                    let action = mem::transmute::<usize, extern "C" fn(c_int)>(fptr);
-                    action(sig);
-                } else {
-                    type SigAction = extern "C" fn(c_int, *mut siginfo_t, *mut c_void);
-                    let action = mem::transmute::<usize, SigAction>(fptr);
-                    action(sig, info, data);
-                }
-            }
-        }
+    if let Some(ref slot) = sigdata.signals.get(&sig) {
+        unsafe { slot.prev.execute(sig, info, data) };
 
         let info = unsafe { info.as_ref() };
         let info = info.unwrap_or_else(|| {
@@ -308,52 +380,16 @@ extern "C" fn handler(sig: c_int, info: *mut siginfo_t, data: *mut c_void) {
         for action in slot.actions.values() {
             action(info);
         }
-    }
-}
-
-#[cfg(not(windows))]
-fn block_signal(signal: c_int) -> Result<sigset_t, Error> {
-    unsafe {
-        // The mem::unitialized is deprecated because it is hard to use correctly in Rust. But
-        // MaybeUninit is new and not supported by all the rustc's we want to support. Furthermore,
-        // sigset_t is a C type anyway and rust limitations should not apply to it, right?
-        #[allow(deprecated)]
-        let mut newsigs: sigset_t = mem::uninitialized();
-        libc::sigemptyset(&mut newsigs);
-        libc::sigaddset(&mut newsigs, signal);
-        #[allow(deprecated)]
-        let mut oldsigs: sigset_t = mem::uninitialized();
-        libc::sigemptyset(&mut oldsigs);
-        if libc::sigprocmask(SIG_BLOCK, &newsigs, &mut oldsigs) == 0 {
-            Ok(oldsigs)
-        } else {
-            Err(Error::last_os_error())
+    } else if let Some(ref prev) = fallback.as_ref() {
+        // In case we get called but don't have the slot for this signal set up yet, we are under
+        // the race condition. We may have the old signal handler stored in the fallback
+        // temporarily.
+        if prev.signal == sig {
+            unsafe { prev.execute(sig, info, data) };
         }
+        // else -> probably should not happen, but races with other threads are possible so
+        // better safe
     }
-}
-
-#[cfg(not(windows))]
-fn restore_signals(signals: libc::sigset_t) -> Result<(), Error> {
-    if unsafe { libc::sigprocmask(SIG_SETMASK, &signals, ptr::null_mut()) } == 0 {
-        Ok(())
-    } else {
-        Err(Error::last_os_error())
-    }
-}
-
-#[cfg(windows)]
-fn without_signal<F: FnOnce() -> Result<(), Error>>(_signal: c_int, f: F) -> Result<(), Error> {
-    // We don't have such a mechanism in Windows.
-    f()
-}
-
-#[cfg(not(windows))]
-fn without_signal<F: FnOnce() -> Result<(), Error>>(signal: c_int, f: F) -> Result<(), Error> {
-    let old_signals = block_signal(signal)?;
-    let result = f();
-    let restored = restore_signals(old_signals);
-    // In case of errors in both, prefer the one in result.
-    result.and(restored)
 }
 
 /// List of forbidden signals.
@@ -402,7 +438,7 @@ const FORBIDDEN_IMPL: &[c_int] = &[SIGKILL, SIGSTOP, SIGILL, SIGFPE, SIGSEGV];
 ///
 /// Since the library manipulates signals using the low-level C functions, all these can return
 /// errors. Generally, the errors mean something like the specified signal does not exist on the
-/// given platform ‒ ofter a program is debugged and tested on a given OS, it should never return
+/// given platform ‒ after a program is debugged and tested on a given OS, it should never return
 /// an error.
 ///
 /// However, if an error *is* returned, there are no guarantees if the given action was registered
@@ -411,7 +447,7 @@ const FORBIDDEN_IMPL: &[c_int] = &[SIGKILL, SIGSTOP, SIGILL, SIGFPE, SIGSEGV];
 /// # Safety
 ///
 /// This function is unsafe, because the `action` is run inside a signal handler. The set of
-/// functions allowed to be called from within is very limited (they are called signal-safe
+/// functions allowed to be called from within is very limited (they are called async-signal-safe
 /// functions by POSIX). These specifically do *not* contain mutexes and memory
 /// allocation/deallocation. They *do* contain routines to terminate the program, to further
 /// manipulate signals (by the low-level functions, not by this library) and to read and write file
@@ -423,24 +459,35 @@ const FORBIDDEN_IMPL: &[c_int] = &[SIGKILL, SIGSTOP, SIGILL, SIGFPE, SIGSEGV];
 /// As panicking from within a signal handler would be a panic across FFI boundary (which is
 /// undefined behavior), the passed handler must not panic.
 ///
-/// If you find these limitations hard to satisfy, choose from the helper functions in submodules
-/// of this library ‒ these provide safe interface to use some common signal handling patters.
+/// If you find these limitations hard to satisfy, choose from the helper functions in the
+/// [signal-hook](https://docs.rs/signal-hook) crate ‒ these provide safe interface to use some
+/// common signal handling patters.
 ///
 /// # Race condition
 ///
-/// Currently, there's a short race condition. If this is the first action for the given signal,
-/// there was another signal handler previously and the signal comes into a different thread during
-/// this function, it can happen the original handler is not chained in this one instance.
+/// Upon registering the first hook for a given signal into this library, there's a short race
+/// condition under the following circumstances:
 ///
-/// This is considered unimportant problem, since most programs install their signal handlers
-/// during startup, before the signals effectively do anything. If you want to avoid the race
-/// condition completely, initialize all signal handling before starting any threads.
+/// * The program already has a signal handler installed for this particular signal (through some
+///   other library, possibly).
+/// * Concurrently, some other thread installs a different signal handler while it is being
+///   installed by this library.
+/// * At the same time, the signal is delivered.
+///
+/// Under such conditions signal-hook might wrongly "chain" to the older signal handler for a short
+/// while (until the registration is fully complete).
+///
+/// Note that the exact conditions of the race condition might change in future versions of the
+/// library. The recommended way to avoid it is to register signals before starting any additional
+/// threads, or at least not to register signals concurrently.
+///
+/// Alternatively, make sure all signals are handled through this library.
 ///
 /// # Performance
 ///
 /// Even when it is possible to repeatedly install and remove actions during the lifetime of a
 /// program, the installation and removal is considered a slow operation and should not be done
-/// very often. Also, there's limited (though huge) amount of distinct IDs (they are `u64`).
+/// very often. Also, there's limited (though huge) amount of distinct IDs (they are `u128`).
 ///
 /// # Examples
 ///
@@ -512,7 +559,7 @@ where
 /// Register a signal action without checking for forbidden signals.
 ///
 /// This acts the same way as [`register_sigaction`], but without checking for the [`FORBIDDEN`]
-/// signals. All the signal passed are registered and it is up to the caller to make some sense of
+/// signals. All the signals passed are registered and it is up to the caller to make some sense of
 /// them.
 ///
 /// Note that you really need to know what you're doing if you change eg. the `SIGSEGV` signal
@@ -535,26 +582,42 @@ where
     F: Fn(&siginfo_t) + Sync + Send + 'static,
 {
     let globals = GlobalData::ensure();
-    let (mut signals, mut lock) = globals.load();
-    let id = ActionId(*lock);
-    *lock += 1;
     let action = Arc::from(action);
-    without_signal(signal, || {
-        match signals.entry(signal) {
-            Entry::Occupied(mut occupied) => {
-                assert!(occupied.get_mut().actions.insert(id, action).is_none());
-            }
-            Entry::Vacant(place) => {
-                let mut slot = Slot::new(signal)?;
-                slot.actions.insert(id, action);
-                place.insert(slot);
-            }
+
+    let mut lock = globals.data.write();
+
+    let mut sigdata = SignalData::clone(&lock);
+    let id = ActionId(sigdata.next_id);
+    sigdata.next_id += 1;
+
+    match sigdata.signals.entry(signal) {
+        Entry::Occupied(mut occupied) => {
+            assert!(occupied.get_mut().actions.insert(id, action).is_none());
         }
+        Entry::Vacant(place) => {
+            // While the sigaction/signal exchanges the old one atomically, we are not able to
+            // atomically store it somewhere a signal handler could read it. That poses a race
+            // condition where we could lose some signals delivered in between changing it and
+            // storing it.
+            //
+            // Therefore we first store the old one in the fallback storage. The fallback only
+            // covers the cases where the slot is not yet active and becomes "inert" after that,
+            // even if not removed (it may get overwritten by some other signal, but for that the
+            // mutex in globals.data must be unlocked here - and by that time we already stored the
+            // slot.
+            //
+            // And yes, this still leaves a short race condition when some other thread could
+            // replace the signal handler and we would be calling the outdated one for a short
+            // time, until we install the slot.
+            globals.race_fallback.write().store(Some(Prev::detect(signal)?));
 
-        globals.store(signals, lock);
+            let mut slot = Slot::new(signal)?;
+            slot.actions.insert(id, action);
+            place.insert(slot);
+        }
+    }
 
-        Ok(())
-    })?;
+    lock.store(sigdata);
 
     Ok(SigId { signal, action: id })
 }
@@ -565,7 +628,7 @@ where
 /// and false if the action wasn't found.
 ///
 /// It can unregister all the actions installed by [`register`](fn.register.html) as well as the
-/// ones from helper submodules.
+/// ones from downstream crates (like [`signal-hook`](https://docs.rs/signal-hook)).
 ///
 /// # Warning
 ///
@@ -578,13 +641,14 @@ where
 /// SIGKILL).
 pub fn unregister(id: SigId) -> bool {
     let globals = GlobalData::ensure();
-    let (mut signals, lock) = globals.load();
     let mut replace = false;
-    if let Some(slot) = signals.get_mut(&id.signal) {
+    let mut lock = globals.data.write();
+    let mut sigdata = SignalData::clone(&lock);
+    if let Some(slot) = sigdata.signals.get_mut(&id.signal) {
         replace = slot.actions.remove(&id.action).is_some();
     }
     if replace {
-        globals.store(signals, lock);
+        lock.store(sigdata);
     }
     replace
 }
@@ -607,16 +671,17 @@ pub fn unregister(id: SigId) -> bool {
 /// used by the top-level application.
 pub fn unregister_signal(signal: c_int) -> bool {
     let globals = GlobalData::ensure();
-    let (mut signals, lock) = globals.load();
     let mut replace = false;
-    if let Some(slot) = signals.get_mut(&signal) {
+    let mut lock = globals.data.write();
+    let mut sigdata = SignalData::clone(&lock);
+    if let Some(slot) = sigdata.signals.get_mut(&signal) {
         if !slot.actions.is_empty() {
             slot.actions.clear();
             replace = true;
         }
     }
     if replace {
-        globals.store(signals, lock);
+        lock.store(sigdata);
     }
     replace
 }

@@ -18,7 +18,6 @@ travis-ci = { repository = "vorner/signal-hook" }
 maintenance = { status = "actively-developed" }
 
 [dependencies]
-arc-swap = "~0.4"
 libc = "~0.2"
 
 [dev-dependencies]
