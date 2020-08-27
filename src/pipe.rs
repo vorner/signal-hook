@@ -221,7 +221,6 @@ mod tests {
     fn register_with_socket() -> Result<(), Error> {
         let (mut read, write) = UnixStream::pair()?;
         register(libc::SIGUSR1, write)?;
-        read.set_nonblocking(true)?;
         wakeup();
         let mut buff = [0; 1];
         read.read_exact(&mut buff)?;
@@ -233,7 +232,6 @@ mod tests {
     fn register_dgram_socket() -> Result<(), Error> {
         let (read, write) = UnixDatagram::pair()?;
         register(libc::SIGUSR1, write)?;
-        read.set_nonblocking(true)?;
         wakeup();
         let mut buff = [0; 1];
         // The attempt to detect if it is socket can generate an empty message. Therefore, do a few
