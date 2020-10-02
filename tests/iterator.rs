@@ -11,7 +11,10 @@ use std::time::Duration;
 use signal_hook::iterator::Signals;
 use signal_hook::{SIGUSR1, SIGUSR2};
 
+use serial_test::serial;
+
 #[test]
+#[serial]
 fn signals_close_forever() {
     // The cloned instances are connected to each other. Closing one closes all.
     // Closing it terminates the forever that waits for stuff. Well, it terminates all of them.
@@ -52,6 +55,7 @@ fn signals_close_forever() {
 // iterator, possibly), .forever() would do a busy loop.
 // flag)
 #[test]
+#[serial]
 fn signals_block_wait() {
     let signals = Signals::new(&[SIGUSR2]).unwrap();
     let (s, r) = mpsc::channel();
