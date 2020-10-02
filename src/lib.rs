@@ -144,15 +144,16 @@
 //! }
 //! ```
 //!
-//! # Features
+//! # Asynchronous runtime support
 //!
-//! * `mio-support`: The [`Signals` iterator](iterator/struct.Signals.html) becomes pluggable into
-//!   mio 0.6.
-//! * `mio-0_7-support`: The [`Signals` iterator](iterator/struct.Signals.html) becomes pluggable into
-//!   mio 0.7.
-//! * `tokio-support`: The [`Signals`](iterator/struct.Signals.html) can be turned into
-//!   [`Async`](iterator/struct.Async.html), which provides a `Stream` interface for integration in
-//!   the asynchronous world.
+//! If you are looking for integration with an asynchronous runtime take a look at one of the
+//! following adapter crates:
+//!
+//! * [`signal-hook-mio`](https://docs.rs/signal-hook-mio) for mio support
+//! * [`signal-hook-mio-0_6`](https://docs.rs/signal-hook-mio-0_6) for mio 0.6 support
+//! * [`signal-hook-tokio-0_1`](https://docs.rs/signal-hook-tokio-0_1) for tokio 0.1 support
+//!
+//! Feel free to open a pull requests if you want to add support for runtimes not mentioned above.
 
 extern crate libc;
 extern crate signal_hook_registry;

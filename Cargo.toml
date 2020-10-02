@@ -21,6 +21,7 @@ maintenance = { status = "actively-developed" }
 members = [
     "./",
     "signal-hook-registry",
+    "signal-hook-tokio",
     "signal-hook-mio",
 ]
 

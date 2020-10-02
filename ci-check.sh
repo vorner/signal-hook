@@ -30,7 +30,7 @@ if [ "$TRAVIS_OS_NAME" = "windows" ] ; then
 	# The async support crates rely on the iterator module
 	# which isn't available for windows. So exclude them
 	# from the build.
-	EXCLUDE_FROM_BUILD="--exclude signal-hook-mio"
+	EXCLUDE_FROM_BUILD="--exclude signal-hook-mio --exclude signal-hook-tokio"
 else
 	EXCLUDE_FROM_BUILD=""
 fi
