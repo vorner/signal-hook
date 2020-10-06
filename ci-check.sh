@@ -26,11 +26,20 @@ if [ "$TRAVIS_RUST_VERSION" = 1.31.0 ] ; then
 	exit
 fi
 
+if [ "$TRAVIS_OS_NAME" = "windows" ] ; then
+	# The async support crates rely on the iterator module
+	# which isn't available for windows. So exclude them
+	# from the build.
+	EXCLUDE_FROM_BUILD="--exclude signal-hook-mio --exclude signal-hook-tokio"
+else
+	EXCLUDE_FROM_BUILD=""
+fi
+
 export RUSTFLAGS="-D warnings"
 
-cargo build --all --all-features
-cargo test --all --all-features
-cargo test --all
+cargo build --all --all-features $EXCLUDE_FROM_BUILD
+cargo test --all --all-features $EXCLUDE_FROM_BUILD
+cargo test --all $EXCLUDE_FROM_BUILD
 cargo doc --no-deps
 
 # Sometimes nightly doesn't have clippy or rustfmt, so don't try that there.
@@ -38,5 +47,5 @@ if [ "$TRAVIS_RUST_VERSION" = nightly ] ; then
 	exit
 fi
 
-cargo clippy --all --tests -- --deny clippy::all
+cargo clippy --all $EXCLUDE_FROM_BUILD --tests -- --deny clippy::all
 cargo fmt

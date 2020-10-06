@@ -1,7 +1,10 @@
 [package]
 name = "signal-hook"
 version = "0.1.16"
-authors = ["Michal 'vorner' Vaner <vorner@vorner.cz>"]
+authors = [
+    "Michal 'vorner' Vaner <vorner@vorner.cz>",
+    "Thomas Himmelstoss <thimm@posteo.de>",
+]
 description = "Unix signal handling"
 documentation = "https://docs.rs/signal-hook"
 repository = "https://github.com/vorner/signal-hook"
@@ -14,29 +17,22 @@ edition = "2018"
 travis-ci = { repository = "vorner/signal-hook" }
 maintenance = { status = "actively-developed" }
 
-[features]
-mio-support = ["mio"]
-mio-0_7-support = ["mio_0_7"]
-tokio-support = ["futures", "mio-support", "tokio-reactor"]
-
 [workspace]
 members = [
     "./",
     "signal-hook-registry",
+    "signal-hook-tokio",
+    "signal-hook-mio",
 ]
 
 [dependencies]
 libc = "~0.2"
-futures = { version = "~0.1", optional = true }
-mio_0_7 = { package = "mio", version = "~0.7", features = ["os-util"], optional = true }
-mio = { version = "~0.6", optional = true }
 signal-hook-registry = { version = "~1.2", path = "signal-hook-registry" }
-tokio-reactor = { version = "~0.1", optional = true }
 
 [dev-dependencies]
-mio_0_7 = { package ="mio", version = "~0.7", features = ["os-poll", "os-util"] }
 version-sync = "~0.8"
-tokio = "~0.1"
+serial_test = "~0.5"
+
 
 [package.metadata.docs.rs]
 all-features = true
