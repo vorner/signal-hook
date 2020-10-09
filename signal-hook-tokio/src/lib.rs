@@ -64,8 +64,9 @@ pub mod v0_1 {
 
     use std::borrow::Borrow;
     use std::io::Error;
+    use std::sync::Arc;
 
-    use signal_hook::iterator::backend::{PollResult, SignalDelivery, SignalIterator};
+    use signal_hook::iterator::backend::{Controller, PollResult, SignalDelivery, SignalIterator};
 
     use futures_0_1::stream::Stream;
     use futures_0_1::{Async, Poll};
@@ -74,6 +75,9 @@ pub mod v0_1 {
 
     use tokio_0_1::io::AsyncRead;
     use tokio_0_1::net::unix::UnixStream;
+
+    /// A shareable handle to control an associated [`Signals`] instance.
+    pub type ControllerHandle = Arc<Controller<UnixStream>>;
 
     /// An asynchronous stream of arriving signals using the tokio runtime.
     ///
@@ -99,12 +103,20 @@ pub mod v0_1 {
         /// Check if signals arrived by polling the stream for some bytes.
         ///
         /// Returns true if it was possible to read a byte and false otherwise.
-        fn has_signals(mut read: &UnixStream) -> Result<bool, Error> {
+        fn has_signals(read: &mut UnixStream) -> Result<bool, Error> {
             match read.poll_read(&mut [0u8]) {
                 Poll::Ok(Async::NotReady) => Ok(false),
                 Poll::Ok(Async::Ready(num_read)) => Ok(num_read > 0),
                 Poll::Err(error) => Err(error),
             }
+        }
+
+        /// Get a shareable handle to a [`Controller`] for this instance.
+        ///
+        /// This can be used to add further signals or close the [`Signals`] instance
+        /// which terminates the whole signal stream.
+        pub fn controller(&self) -> ControllerHandle {
+            self.0.controller()
         }
     }
 

@@ -9,7 +9,7 @@ use std::sync::Arc;
 use std::thread;
 use std::time::Duration;
 
-use signal_hook::iterator::Signals;
+use signal_hook::iterator::{ControllerHandle, Signals};
 use signal_hook::{SIGUSR1, SIGUSR2};
 
 use serial_test::serial;
@@ -22,12 +22,16 @@ fn send_sigusr2() {
     unsafe { libc::raise(SIGUSR2) };
 }
 
-fn setup_without_any_signals() -> Signals {
-    Signals::new(&[]).unwrap()
+fn setup_without_any_signals() -> (Signals, ControllerHandle) {
+    let signals = Signals::new(&[]).unwrap();
+    let controller = signals.controller();
+    (signals, controller)
 }
 
-fn setup_for_sigusr2() -> Signals {
-    Signals::new(&[SIGUSR2]).unwrap()
+fn setup_for_sigusr2() -> (Signals, ControllerHandle) {
+    let signals = Signals::new(&[SIGUSR2]).unwrap();
+    let controller = signals.controller();
+    (signals, controller)
 }
 
 macro_rules! assert_signals {
@@ -46,39 +50,28 @@ macro_rules! assert_no_signals {
 
 #[test]
 #[serial]
-fn signals_close_forever() {
-    // The cloned instances are connected to each other. Closing one closes all.
-    // Closing it terminates the forever that waits for stuff. Well, it terminates all of them.
-    let signals = Signals::new(&[SIGUSR1]).unwrap();
+fn forever_terminates_when_closed() {
+    let (signals, controller) = setup_for_sigusr2();
+
     // Detect early terminations.
     let stopped = Arc::new(AtomicBool::new(false));
-    let threads = (0..5).map(|_| {
-        let signals_bg = signals.clone();
-        let stopped_bg = Arc::clone(&stopped);
-        thread::spawn(move || {
-            // Eat all the signals there are (might come from a concurrent test, in theory).
-            // Would wait forever, but it should be terminated by the close below.
-            for _sig in &signals_bg {}
 
-            stopped_bg.store(true, Ordering::SeqCst);
-        })
+    let stopped_bg = Arc::clone(&stopped);
+    let thread = thread::spawn(move || {
+        // Eat all the signals there are (might come from a concurrent test, in theory).
+        // Would wait forever, but it should be terminated by the close below.
+        for _sig in signals {}
+
+        stopped_bg.store(true, Ordering::SeqCst);
     });
 
-    // The map method is lazy and will execute the function only during iteration. So we
-    // collect the JoinHandles to ensure the threads are actually started.
-    let threads: Vec<thread::JoinHandle<()>> = threads.collect();
-
-    // Wait a bit… if some thread terminates by itself.
+    // Wait a bit to see if the thread terminates by itself.
     thread::sleep(Duration::from_millis(100));
     assert!(!stopped.load(Ordering::SeqCst));
 
-    signals.close();
+    controller.close();
 
-    // If they don't terminate correctly, the test just keeps running. Not the best way to do
-    // tests, but whatever…
-    for thread in threads {
-        thread.join().unwrap();
-    }
+    thread.join().unwrap();
 }
 
 // A reproducer for #16: if we had the mio-support enabled (which is enabled also by the
@@ -88,7 +81,7 @@ fn signals_close_forever() {
 #[test]
 #[serial]
 fn signals_block_wait() {
-    let signals = Signals::new(&[SIGUSR2]).unwrap();
+    let mut signals = Signals::new(&[SIGUSR2]).unwrap();
     let (s, r) = mpsc::channel();
     thread::spawn(move || {
         // Technically, it may spuriously return early. But it shouldn't be doing it too much, so
@@ -110,7 +103,7 @@ fn signals_block_wait() {
 #[test]
 #[serial]
 fn pending_doesnt_block() {
-    let signals = setup_for_sigusr2();
+    let (mut signals, _) = setup_for_sigusr2();
 
     let mut recieved_signals = signals.pending();
 
@@ -120,7 +113,7 @@ fn pending_doesnt_block() {
 #[test]
 #[serial]
 fn wait_returns_recieved_signals() {
-    let signals = setup_for_sigusr2();
+    let (mut signals, _) = setup_for_sigusr2();
     send_sigusr2();
 
     let recieved_signals = signals.wait();
@@ -131,7 +124,7 @@ fn wait_returns_recieved_signals() {
 #[test]
 #[serial]
 fn forever_returns_recieved_signals() {
-    let signals = setup_for_sigusr2();
+    let (signals, _) = setup_for_sigusr2();
     send_sigusr2();
 
     let signal = signals.forever().take(1);
@@ -142,8 +135,8 @@ fn forever_returns_recieved_signals() {
 #[test]
 #[serial]
 fn wait_doesnt_block_when_closed() {
-    let signals = setup_for_sigusr2();
-    signals.close();
+    let (mut signals, controller) = setup_for_sigusr2();
+    controller.close();
 
     let mut recieved_signals = signals.wait();
 
@@ -153,14 +146,13 @@ fn wait_doesnt_block_when_closed() {
 #[test]
 #[serial]
 fn wait_unblocks_when_closed() {
-    let signals = setup_without_any_signals();
-    let close_handle = signals.clone();
+    let (mut signals, controller) = setup_without_any_signals();
 
     let thread = thread::spawn(move || {
         signals.wait();
     });
 
-    close_handle.close();
+    controller.close();
 
     thread.join().unwrap();
 }
@@ -168,8 +160,8 @@ fn wait_unblocks_when_closed() {
 #[test]
 #[serial]
 fn forever_doesnt_block_when_closed() {
-    let signals = setup_for_sigusr2();
-    signals.close();
+    let (signals, controller) = setup_for_sigusr2();
+    controller.close();
 
     let mut signal = signals.forever();
 
@@ -179,7 +171,7 @@ fn forever_doesnt_block_when_closed() {
 #[test]
 #[serial]
 fn add_signal_after_creation() {
-    let signals = setup_without_any_signals();
+    let (mut signals, _) = setup_without_any_signals();
     signals.add_signal(SIGUSR1).unwrap();
 
     send_sigusr1();
@@ -190,7 +182,7 @@ fn add_signal_after_creation() {
 #[test]
 #[serial]
 fn delayed_signal_consumed() {
-    let signals = setup_for_sigusr2();
+    let (mut signals, _) = setup_for_sigusr2();
     signals.add_signal(SIGUSR1).unwrap();
 
     send_sigusr1();
@@ -209,16 +201,16 @@ fn delayed_signal_consumed() {
 #[test]
 #[serial]
 fn is_closed_initially_returns_false() {
-    let signals = setup_for_sigusr2();
+    let (_, controller) = setup_for_sigusr2();
 
-    assert_eq!(signals.is_closed(), false);
+    assert_eq!(controller.is_closed(), false);
 }
 
 #[test]
 #[serial]
 fn is_closed_returns_true_when_closed() {
-    let signals = setup_for_sigusr2();
-    signals.close();
+    let (_, controller) = setup_for_sigusr2();
+    controller.close();
 
-    assert_eq!(signals.is_closed(), true);
+    assert_eq!(controller.is_closed(), true);
 }

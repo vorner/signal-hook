@@ -15,7 +15,7 @@ use libc::c_int;
 #[test]
 #[serial]
 fn mio_wakeup() {
-    let signals = Signals::new(&[signal_hook::SIGUSR1]).unwrap();
+    let mut signals = Signals::new(&[signal_hook::SIGUSR1]).unwrap();
     let token = Token(0);
     let poll = Poll::new().unwrap();
     poll.register(&signals, token, Ready::readable(), PollOpt::level())
@@ -45,7 +45,7 @@ fn mio_wakeup() {
 #[test]
 #[serial]
 fn mio_multiple_signals() {
-    let signals = Signals::new(&[signal_hook::SIGUSR1, signal_hook::SIGUSR2]).unwrap();
+    let mut signals = Signals::new(&[signal_hook::SIGUSR1, signal_hook::SIGUSR2]).unwrap();
     let poll = Poll::new().unwrap();
     let token = Token(0);
     poll.register(&signals, token, Ready::readable(), PollOpt::level())
@@ -78,7 +78,7 @@ fn mio_multiple_signals() {
 #[test]
 #[serial]
 fn mio_parallel_multiple() {
-    let signals = Signals::new(&[signal_hook::SIGUSR1]).unwrap();
+    let mut signals = Signals::new(&[signal_hook::SIGUSR1]).unwrap();
     let poll = Poll::new().unwrap();
     let token = Token(0);
     poll.register(&signals, token, Ready::readable(), PollOpt::level())

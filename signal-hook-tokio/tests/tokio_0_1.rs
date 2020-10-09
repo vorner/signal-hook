@@ -57,3 +57,14 @@ fn delayed() {
     // Just make sure it didn't terminate prematurely
     assert_eq!(CNT, cnt.load(Ordering::Relaxed));
 }
+
+#[test]
+#[serial]
+fn close_signal_stream() {
+    let mut signals = Signals::new(&[signal_hook::SIGUSR1, signal_hook::SIGUSR2]).unwrap();
+    signals.controller().close();
+
+    let async_result = signals.poll().unwrap();
+
+    assert_eq!(async_result, Async::Ready(None));
+}
