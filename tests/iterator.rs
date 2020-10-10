@@ -13,6 +13,22 @@ use signal_hook::{SIGUSR1, SIGUSR2};
 
 use serial_test::serial;
 
+fn send_sigusr1() {
+    unsafe { libc::raise(SIGUSR1) };
+}
+
+fn send_sigusr2() {
+    unsafe { libc::raise(SIGUSR2) };
+}
+
+fn setup_without_any_signals() -> Signals {
+    Signals::new(&[]).unwrap()
+}
+
+fn setup_for_sigusr2() -> Signals {
+    Signals::new(&[SIGUSR2]).unwrap()
+}
+
 #[test]
 #[serial]
 fn signals_close_forever() {
@@ -74,4 +90,123 @@ fn signals_block_wait() {
         .recv_timeout(Duration::from_millis(100))
         .expect_err("Wait didn't wait properly");
     assert_eq!(err, RecvTimeoutError::Timeout);
+}
+
+#[test]
+#[serial]
+fn pending_doesnt_block_and_is_empty_if_no_signals_recieved() {
+    let signals = setup_for_sigusr2();
+
+    let mut recieved_signals = signals.pending();
+
+    assert_eq!(recieved_signals.next(), None);
+}
+
+#[test]
+#[serial]
+fn wait_returns_recieved_signals() {
+    let signals = setup_for_sigusr2();
+    send_sigusr2();
+
+    let mut recieved_signals = signals.wait();
+
+    assert_eq!(recieved_signals.next(), Some(SIGUSR2));
+    assert_eq!(recieved_signals.next(), None);
+}
+
+#[test]
+#[serial]
+fn forever_returns_recieved_signals() {
+    let signals = setup_for_sigusr2();
+    send_sigusr2();
+
+    let signal = signals.forever().next();
+
+    assert_eq!(signal, Some(SIGUSR2));
+}
+
+#[test]
+#[serial]
+fn wait_doesnt_block_when_closed() {
+    let signals = setup_for_sigusr2();
+    signals.close();
+
+    let mut recieved_signals = signals.wait();
+
+    assert_eq!(recieved_signals.next(), None);
+}
+
+#[test]
+#[serial]
+fn wait_unblocks_when_closed() {
+    let signals = setup_without_any_signals();
+    let close_handle = signals.clone();
+
+    let thread = thread::spawn(move || {
+        signals.wait();
+    });
+
+    close_handle.close();
+
+    thread.join().unwrap();
+}
+
+#[test]
+#[serial]
+fn forever_doesnt_block_when_closed() {
+    let signals = setup_for_sigusr2();
+    signals.close();
+
+    let signal = signals.forever().next();
+
+    assert_eq!(signal, None);
+}
+
+#[test]
+#[serial]
+fn add_signal_after_creation() {
+    let signals = setup_without_any_signals();
+    signals.add_signal(SIGUSR1).unwrap();
+
+    send_sigusr1();
+
+    assert_eq!(signals.pending().next(), Some(SIGUSR1));
+}
+
+#[test]
+#[serial]
+fn delayed_signal_consumed() {
+    let signals = setup_for_sigusr2();
+    signals.add_signal(SIGUSR1).unwrap();
+
+    send_sigusr1();
+    let mut recieved_signals = signals.wait();
+    send_sigusr2();
+
+    assert_eq!(recieved_signals.next(), Some(SIGUSR1));
+    assert_eq!(recieved_signals.next(), Some(SIGUSR2));
+    assert_eq!(recieved_signals.next(), None);
+
+    // The pipe still contains the byte from the second
+    // signal and so wait won't block but won't return
+    // a signal.
+    recieved_signals = signals.wait();
+    assert_eq!(recieved_signals.next(), None);
+}
+
+#[test]
+#[serial]
+fn is_closed_initially_returns_false() {
+    let signals = setup_for_sigusr2();
+
+    assert_eq!(signals.is_closed(), false);
+}
+
+#[test]
+#[serial]
+fn is_closed_returns_true_when_closed() {
+    let signals = setup_for_sigusr2();
+    signals.close();
+
+    assert_eq!(signals.is_closed(), true);
 }
