@@ -2,6 +2,7 @@
 
 extern crate signal_hook;
 
+use std::collections::HashSet;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::mpsc::{self, RecvTimeoutError};
 use std::sync::Arc;
@@ -27,6 +28,20 @@ fn setup_without_any_signals() -> Signals {
 
 fn setup_for_sigusr2() -> Signals {
     Signals::new(&[SIGUSR2]).unwrap()
+}
+
+macro_rules! assert_signals {
+    ($actual:expr, $($expected:expr),+ $(,)?) => {
+        let actual = $actual.collect::<HashSet<libc::c_int>>();
+        let expected = vec!($($expected),+).into_iter().collect::<HashSet<libc::c_int>>();
+        assert_eq!(actual, expected);
+    };
+}
+
+macro_rules! assert_no_signals {
+    ($signals:expr) => {
+        assert_eq!($signals.next(), None);
+    };
 }
 
 #[test]
@@ -94,12 +109,12 @@ fn signals_block_wait() {
 
 #[test]
 #[serial]
-fn pending_doesnt_block_and_is_empty_if_no_signals_recieved() {
+fn pending_doesnt_block() {
     let signals = setup_for_sigusr2();
 
     let mut recieved_signals = signals.pending();
 
-    assert_eq!(recieved_signals.next(), None);
+    assert_no_signals!(recieved_signals);
 }
 
 #[test]
@@ -108,10 +123,9 @@ fn wait_returns_recieved_signals() {
     let signals = setup_for_sigusr2();
     send_sigusr2();
 
-    let mut recieved_signals = signals.wait();
+    let recieved_signals = signals.wait();
 
-    assert_eq!(recieved_signals.next(), Some(SIGUSR2));
-    assert_eq!(recieved_signals.next(), None);
+    assert_signals!(recieved_signals, SIGUSR2);
 }
 
 #[test]
@@ -120,9 +134,9 @@ fn forever_returns_recieved_signals() {
     let signals = setup_for_sigusr2();
     send_sigusr2();
 
-    let signal = signals.forever().next();
+    let signal = signals.forever().take(1);
 
-    assert_eq!(signal, Some(SIGUSR2));
+    assert_signals!(signal, SIGUSR2);
 }
 
 #[test]
@@ -133,7 +147,7 @@ fn wait_doesnt_block_when_closed() {
 
     let mut recieved_signals = signals.wait();
 
-    assert_eq!(recieved_signals.next(), None);
+    assert_no_signals!(recieved_signals);
 }
 
 #[test]
@@ -157,9 +171,9 @@ fn forever_doesnt_block_when_closed() {
     let signals = setup_for_sigusr2();
     signals.close();
 
-    let signal = signals.forever().next();
+    let mut signal = signals.forever();
 
-    assert_eq!(signal, None);
+    assert_no_signals!(signal);
 }
 
 #[test]
@@ -170,7 +184,7 @@ fn add_signal_after_creation() {
 
     send_sigusr1();
 
-    assert_eq!(signals.pending().next(), Some(SIGUSR1));
+    assert_signals!(signals.pending(), SIGUSR1);
 }
 
 #[test]
@@ -183,15 +197,13 @@ fn delayed_signal_consumed() {
     let mut recieved_signals = signals.wait();
     send_sigusr2();
 
-    assert_eq!(recieved_signals.next(), Some(SIGUSR1));
-    assert_eq!(recieved_signals.next(), Some(SIGUSR2));
-    assert_eq!(recieved_signals.next(), None);
+    assert_signals!(recieved_signals, SIGUSR1, SIGUSR2);
 
     // The pipe still contains the byte from the second
     // signal and so wait won't block but won't return
     // a signal.
     recieved_signals = signals.wait();
-    assert_eq!(recieved_signals.next(), None);
+    assert_no_signals!(recieved_signals);
 }
 
 #[test]
