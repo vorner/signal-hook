@@ -183,10 +183,10 @@ impl Signals {
     pub fn wait(&self) -> Pending {
         match self.0.poll_pending(&mut Self::has_signals) {
             Ok(Some(pending)) => pending,
-            Ok(None) => unreachable!(
-                "Because of the blocking has_signals method the next_signal \
-                method never returns Poll::Pending but blocks until a signal arrived"
-            ),
+            // Because of the blocking has_signals method the poll_pending method
+            // only returns None if the instance is closed. But we want to return
+            // a possibly empty pending object anyway.
+            Ok(None) => self.pending(),
             // Users can't manipulate the internal file descriptors and the way we use them
             // shouldn't produce any errors. So it is OK to panic.
             Err(error) => panic!("Unexpected error: {}", error),
@@ -296,7 +296,7 @@ impl Iterator for Forever {
             PollResult::Closed => None,
             PollResult::Pending => unreachable!(
                 "Because of the blocking has_signals method the \
-                next_signal method never returns Poll::Pending but blocks until a signal arrived"
+                poll_signal method never returns Poll::Pending but blocks until a signal arrived"
             ),
             // Users can't manipulate the internal file descriptors and the way we use them
             // shouldn't produce any errors. So it is OK to panic.
