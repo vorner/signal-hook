@@ -160,49 +160,46 @@ impl Drop for WakeFd {
 }
 
 pub(crate) fn wake(pipe: RawFd, method: WakeMethod, buffer: Option<&[u8]>) {
-    unsafe {
-        // This writes some data into the pipe.
-        //
-        // There are two tricks:
-        // * First, the crazy cast. The first part turns reference into pointer. The second part
-        //   turns pointer to u8 into a pointer to void, which is what write requires.
-        // * Second, we ignore errors, on purpose. We don't have any means to handling them. The
-        //   two conceivable errors are EBADFD, if someone passes a non-existent file descriptor or
-        //   if it is closed. The second is EAGAIN, in which case the pipe is full ‒ there were
-        //   many signals, but the reader didn't have time to read the data yet. It'll still get
-        //   woken up, so not fitting another letter in it is fine.
+    // This writes some data into the pipe.
+    //
+    // There are two tricks:
+    // * First, the crazy cast. The first part turns reference into pointer. The second part
+    //   turns pointer to u8 into a pointer to void, which is what write requires.
+    // * Second, we ignore errors, on purpose. We don't have any means to handling them. The
+    //   two conceivable errors are EBADFD, if someone passes a non-existent file descriptor or
+    //   if it is closed. The second is EAGAIN, in which case the pipe is full ‒ there were
+    //   many signals, but the reader didn't have time to read the data yet. It'll still get
+    //   woken up, so not fitting another letter in it is fine.
 
-        let (data, amount) = if let Some(buffer) = buffer {
-            (buffer as *const _ as *const _, buffer.len())
-        }
-        else {
-            (b"X" as *const _ as *const _, 1)
-        };
+    let (data, amount) = if let Some(buffer) = buffer {
+        (buffer as *const _ as *const _, buffer.len())
+    }
+    else {
+        (b"X" as *const _ as *const _, 1)
+    };
 
-        let written = match method {
-            WakeMethod::Write => libc::write(pipe, data, amount),
-            WakeMethod::Send => libc::send(pipe, data, amount, libc::MSG_DONTWAIT),
+    let written = match method {
+        WakeMethod::Write => unsafe { libc::write(pipe, data, amount) },
+        WakeMethod::Send => unsafe { libc::send(pipe, data, amount, libc::MSG_DONTWAIT) },
+    };
 
-        };
-        // There are three possibilites for libc:write:
-        // 1. All good.  In which case written == amount (after casting).
-        // 2. Some written.  In which case written < amount (after casting; written is not -1).
-        //    This possibility is a hard failure.
-        // 3. Error.  In this case written is -1.  Based on
-        //    https://www.man7.org/linux/man-pages/man2/write.2.html it seems safe to assume the
-        //    failure is atomic (nothing written).  In addition, if this were not true there would
-        //    be no way to know how many bytes were actually written which would it impossible to
-        //    recover from any error.
-        //    unrecoverable.
+    // There are three possibilites for libc:write:
+    // 1. All good.  In which case written == amount (after casting).
+    // 2. Some written.  In which case written < amount (after casting; written is not -1).
+    //    This possibility is a hard failure.
+    // 3. Error.  In this case written is -1.  Based on
+    //    https://www.man7.org/linux/man-pages/man2/write.2.html it seems safe to assume the
+    //    failure is atomic (nothing written).  In addition, if this were not true there would
+    //    be no way to know how many bytes were actually written which would it impossible to
+    //    recover from any error.
+    //    unrecoverable.
 
-        if written as size_t != amount && amount > 1 && written > 0 {
-            // unsafe
-            {
-                const MSG: &[u8] =
-                    b"Write method not atomic in pipe::wake. Aborting";
-                libc::write(2, MSG.as_ptr() as *const _, MSG.len());
-                libc::abort();
-            }
+    if written as size_t != amount && amount > 1 && written > 0 {
+        const MSG: &[u8] =
+            b"Write method not atomic in pipe::wake. Aborting";
+        unsafe {
+            libc::write(2, MSG.as_ptr() as *const _, MSG.len());
+            libc::abort();
         }
     }
 }
