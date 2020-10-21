@@ -77,7 +77,7 @@
 use std::io::{Error, ErrorKind};
 use std::os::unix::io::{AsRawFd, IntoRawFd, RawFd};
 
-use libc::{self, c_int, siginfo_t};
+use libc::{self, c_int, siginfo_t, size_t};
 
 use crate::SigId;
 
@@ -179,20 +179,31 @@ pub(crate) fn wake(pipe: RawFd, method: WakeMethod, buffer: Option<&[u8]>) {
             (b"X" as *const _ as *const _, 1)
         };
 
-        match method {
+        let written = match method {
             WakeMethod::Write => libc::write(pipe, data, amount),
             WakeMethod::Send => libc::send(pipe, data, amount, libc::MSG_DONTWAIT),
-/*
-    if written != amount && amount > 1
-            unsafe {
+
+        };
+        // There are three possibilites for libc:write:
+        // 1. All good.  In which case written == amount (after casting).
+        // 2. Some written.  In which case written < amount (after casting; written is not -1).
+        //    This possibility is a hard failure.
+        // 3. Error.  In this case written is -1.  Based on
+        //    https://www.man7.org/linux/man-pages/man2/write.2.html it seems safe to assume the
+        //    failure is atomic (nothing written).  In addition, if this were not true there would
+        //    be no way to know how many bytes were actually written which would it impossible to
+        //    recover from any error.
+        //    unrecoverable.
+
+        if written as size_t != amount && amount > 1 && written > 0 {
+            // unsafe
+            {
                 const MSG: &[u8] =
-                    b"Platform broken, got NULL as siginfo to signal handler. Aborting";
+                    b"Write method not atomic in pipe::wake. Aborting";
                 libc::write(2, MSG.as_ptr() as *const _, MSG.len());
                 libc::abort();
             }
-*/
-
-        };
+        }
     }
 }
 
