@@ -62,7 +62,7 @@ impl<R, W: AsRawFd> Waker<R, W> {
 
     /// Sends a wakeup signal to the internal wakeup pipe.
     fn wake(&self) {
-        pipe::wake(self.write.as_raw_fd(), WakeMethod::Send);
+        pipe::wake(self.write.as_raw_fd(), WakeMethod::Send, None);
     }
 }
 

@@ -77,9 +77,39 @@
 use std::io::{Error, ErrorKind};
 use std::os::unix::io::{AsRawFd, IntoRawFd, RawFd};
 
-use libc::{self, c_int};
+use libc::{self, c_int, siginfo_t};
 
 use crate::SigId;
+
+/// nfx: Document it!
+pub trait ExtractAndBuffer: Clone + Copy {
+    /// nfx: Document it!
+    fn new(source: &siginfo_t) -> Self;
+    /// nfx: Document it!
+    fn to_buffer(&self, buffer: &mut [u8]) -> u8 {
+        let self_size = std::mem::size_of::<Self>();
+        if self_size < buffer.len() {
+            let dst = &mut buffer[..] as *mut _ as *mut Self;
+            unsafe { std::ptr::write(dst, *self) };
+            self_size as u8
+        }
+        else {
+            0
+        }
+    }
+    /// nfx: Document it!
+    fn from_buffer(&mut self, buffer: &[u8]) -> bool {
+        let self_size = std::mem::size_of::<Self>();
+        if self_size == buffer.len() {
+            let src = &buffer[..] as *const _ as *const Self;
+            unsafe { std::ptr::write(self, *src) };
+            true
+        }
+        else {
+            false
+        }
+    }
+}
 
 #[derive(Copy, Clone)]
 pub(crate) enum WakeMethod {
@@ -107,8 +137,8 @@ impl WakeFd {
         }
         Ok(())
     }
-    fn wake(&self) {
-        wake(self.fd, self.method);
+    fn wake(&self, buffer: Option<&[u8]>) {
+        wake(self.fd, self.method, buffer);
     }
 }
 
@@ -126,7 +156,7 @@ impl Drop for WakeFd {
     }
 }
 
-pub(crate) fn wake(pipe: RawFd, method: WakeMethod) {
+pub(crate) fn wake(pipe: RawFd, method: WakeMethod, buffer: Option<&[u8]>) {
     unsafe {
         // This writes some data into the pipe.
         //
@@ -138,10 +168,17 @@ pub(crate) fn wake(pipe: RawFd, method: WakeMethod) {
         //   if it is closed. The second is EAGAIN, in which case the pipe is full ‒ there were
         //   many signals, but the reader didn't have time to read the data yet. It'll still get
         //   woken up, so not fitting another letter in it is fine.
-        let data = b"X" as *const _ as *const _;
+
+        let (data, amount) = if let Some(buffer) = buffer {
+            (buffer as *const _ as *const _, buffer.len())
+        }
+        else {
+            (b"X" as *const _ as *const _, 1)
+        };
+
         match method {
-            WakeMethod::Write => libc::write(pipe, data, 1),
-            WakeMethod::Send => libc::send(pipe, data, 1, libc::MSG_DONTWAIT),
+            WakeMethod::Write => libc::write(pipe, data, amount),
+            WakeMethod::Send => libc::send(pipe, data, amount, libc::MSG_DONTWAIT),
         };
     }
 }
@@ -170,23 +207,10 @@ pub(crate) fn wake(pipe: RawFd, method: WakeMethod) {
 /// * If it is not possible, the [`O_NONBLOCK`][libc::O_NONBLOCK] will be set on the file
 ///   descriptor and [`write`][libc::write] will be used instead.
 pub fn register_raw(signal: c_int, pipe: RawFd) -> Result<SigId, Error> {
-    let res = unsafe { libc::send(pipe, &[] as *const _, 0, libc::MSG_DONTWAIT) };
-    let fd = match (res, Error::last_os_error().kind()) {
-        (0, _) | (-1, ErrorKind::WouldBlock) => WakeFd {
-            fd: pipe,
-            method: WakeMethod::Send,
-        },
-        _ => {
-            let fd = WakeFd {
-                fd: pipe,
-                method: WakeMethod::Write,
-            };
-            fd.set_flags()?;
-            fd
-        }
-    };
-    let action = move || fd.wake();
-    unsafe { crate::register(signal, action) }
+    let fd = determine_wake_method(pipe)?;
+    unsafe { crate::register(signal, move ||{
+        fd.wake(None);
+    }) }
 }
 
 /// Registers a write to a self-pipe whenever there's the signal.
@@ -202,6 +226,194 @@ where
     P: IntoRawFd + 'static,
 {
     register_raw(signal, pipe.into_raw_fd())
+}
+
+/// The maximum number of bytes (maximum struct size) supported by
+/// register_struct / register_struct_raw.  If the maximum size is exceeded a single null is
+/// written indicating a zero-sized struct.  Ideally, the size would be checked at compile-time but
+/// does not appear to be supported at the time this was written.
+pub const STRUCT_SIZE_MAX: usize = 63;
+
+/// nfx: Document it!
+pub fn register_struct_raw<T>(signal: c_int, pipe: RawFd) -> Result<SigId, Error>
+where
+    T: ExtractAndBuffer,
+{
+    let fd = determine_wake_method(pipe)?;
+    unsafe { crate::register_sigaction(signal, move |source|{
+        let s = T::new(source);
+        let mut buffer: [u8; STRUCT_SIZE_MAX+1] = [0; STRUCT_SIZE_MAX+1];
+        let size = s.to_buffer(&mut buffer[1..]);
+        buffer[0] = size;
+        let size = size as usize;
+        fd.wake(Some(&buffer[0..size+1]));
+    }) }
+}
+
+/// Registers writing customized data to a self-pipe whenever there's the signal.
+///
+/// # Examples
+///
+/// This example mimics the behaviour of [`register`].  Instead of writing an ASCII X (b"X") it
+/// writes a null (0u8) but is otherwise indistinguishable.
+///
+/// ```
+/// use std::io::Read;
+/// use std::os::unix::net::UnixStream;
+///
+/// use libc::{siginfo_t};
+/// use signal_hook::pipe::{ExtractAndBuffer, register_struct};
+///
+/// #[derive(Clone, Copy)]
+/// struct JustNull {}
+///
+/// impl ExtractAndBuffer for JustNull {
+///     fn new(_source: &siginfo_t) -> Self {
+///         Self {}
+///     }
+///     fn to_buffer(&self, _fill_this: &mut [u8]) -> u8 {
+///         0
+///     }
+/// }
+///
+/// fn main() -> Result<(), Box<dyn std::error::Error>> {
+///     let (mut read, write) = UnixStream::pair()?;
+///     println!();
+///     // Use JustNull to write to our pipe when SIGUSR1 is received
+///     let id = register_struct::<JustNull, _>(signal_hook::SIGUSR1, write)?;
+///     println!("id = {:?}", id);
+///     // Send ourselves SIGUSR1 in bit
+///     std::thread::spawn(move || {
+///         std::thread::sleep(std::time::Duration::from_millis(250));
+///         unsafe { assert_eq!(0, libc::raise(libc::SIGUSR1)) };
+///     });
+///     let mut x = [255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255];
+///     // Wait for the signal
+///     let c = read.read(&mut x)?;
+///     println!();
+///     println!("c = {:?}", c);
+///     println!("x = {:?}", x);
+///     println!();
+///     assert!(c == 1 && x[0] == 0 && x[1] == 255);
+///     Ok(())
+/// }
+/// ```
+///
+/// This example writes the process ID (pid) and user ID (uid) of the sending application then reads those in a threaded signal handler.
+///
+/// ```
+/// use std::io::Read;
+/// use std::os::unix::net::UnixStream;
+/// use std::thread::{JoinHandle, spawn};
+/// use std::time::Duration;
+///
+/// use libc::{pid_t, siginfo_t, uid_t};
+/// use signal_hook::pipe::{ExtractAndBuffer, register_struct, STRUCT_SIZE_MAX};
+///
+/// #[derive(Clone, Copy, Debug)]
+/// struct Killer {
+///     pid: pid_t,
+///     uid: uid_t,
+/// }
+///
+/// impl ExtractAndBuffer for Killer {
+///     fn new(source: &siginfo_t) -> Self {
+///         Self {
+///             pid: unsafe { source.si_pid() },
+///             uid: unsafe { source.si_uid() },
+///         }
+///     }
+/// }
+///
+/// impl Default for Killer {
+///     fn default() -> Self {
+///         Self {
+///             pid: pid_t::MAX,
+///             uid: uid_t::MAX,
+///         }
+///     }
+/// }
+///
+/// fn main() -> Result<(), Box<dyn std::error::Error>> {
+///     println!();
+///     let (mut read, write) = UnixStream::pair()?;
+///
+///     // Use Killer to write pid and uid to our pipe when SIGUSR1 is received
+///     let id = register_struct::<Killer, _>(signal_hook::SIGUSR1, write)?;
+///     println!("id = {:?}", id);
+///
+///     // Handle the signal in a thread
+///     let wait_1: JoinHandle<Result<(), std::io::Error>> = spawn(move || {
+///         let mut size = [0];
+///         // Block here until the signal arrives
+///         read.read_exact(&mut size)?;
+///         println!();
+///         println!("si = {:?}", size[0]);
+///         // How many bytes were written?
+///         let expected = size[0] as usize;
+///         if expected > 0 {
+///             // Try reading all those bytes
+///             let mut buffer = [0; STRUCT_SIZE_MAX];
+///             read.set_read_timeout(Some(Duration::from_millis(100)))?;
+///             let actual = read.read(&mut buffer[0..expected])?;
+///             println!("ac = {:?}", actual);
+///             println!("bu = {:?}", buffer);
+///             println!();
+///             // Try stuffing those bytes into our struct
+///             let mut killer = Killer::default();
+///             if killer.from_buffer(&buffer[0..actual]) {
+///                 println!("killer = {:#?}", killer);
+///             }
+///             else {
+///                 println!("killer.from_buffer failed!");
+///             }
+///         }
+///         else {
+///             println!("Zero-sized struct sent but Killer was expected!");
+///         }
+///         Ok(())
+///     });
+///
+///     // Send ourselves SIGUSR1 in bit
+///     let wait_2 = spawn(move || {
+///         std::thread::sleep(Duration::from_millis(250));
+///         unsafe { assert_eq!(0, libc::raise(libc::SIGUSR1)) };
+///     });
+///
+///     // Wait here
+///     wait_1.join().unwrap()?;
+///     wait_2.join().unwrap();
+///
+///     println!();
+///     Ok(())
+/// }
+/// ```
+///
+/// See [`register`] for details regarding the ownership of the pipe.
+pub fn register_struct<T, P>(signal: c_int, pipe: P) -> Result<SigId, Error>
+where
+    T: ExtractAndBuffer,
+    P: IntoRawFd + 'static,
+{
+    register_struct_raw::<T>(signal, pipe.into_raw_fd())
+}
+
+fn determine_wake_method(pipe: RawFd) -> Result<WakeFd, Error> {
+    let res = unsafe { libc::send(pipe, &[] as *const _, 0, libc::MSG_DONTWAIT) };
+    Ok(match (res, Error::last_os_error().kind()) {
+        (0, _) | (-1, ErrorKind::WouldBlock) => WakeFd {
+            fd: pipe,
+            method: WakeMethod::Send,
+        },
+        _ => {
+            let fd = WakeFd {
+                fd: pipe,
+                method: WakeMethod::Write,
+            };
+            fd.set_flags()?;
+            fd
+        }
+    })
 }
 
 #[cfg(test)]

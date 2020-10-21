@@ -183,4 +183,7 @@ pub const SIGABRT_COMPAT: libc::c_int = 6;
 /// Ctrl-Break is pressed for Windows Console processes.
 pub const SIGBREAK: libc::c_int = 21;
 
+#[cfg(not(windows))]
+pub use signal_hook_registry::{register, register_sigaction, unregister, SigId, FORBIDDEN};
+#[cfg(windows)]
 pub use signal_hook_registry::{register, unregister, SigId, FORBIDDEN};
