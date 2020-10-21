@@ -90,12 +90,8 @@ pub trait ExtractAndBuffer: Clone + Copy {
         let self_size = std::mem::size_of::<Self>();
         if self_size < buffer.len() {
             let src = self as *const _ as *const u8;
-            let dst = &mut buffer[..] as *mut u8;
+            let dst = &mut buffer[..] as *mut _ as *mut u8;
             unsafe { std::ptr::copy_nonoverlapping(src, dst, self_size) };
-/* rmv
-            let dst = &mut buffer[..] as *mut _ as *mut Self;
-            unsafe { std::ptr::write(dst, *self) };
-*/
             self_size as u8
         }
         else {
@@ -106,13 +102,10 @@ pub trait ExtractAndBuffer: Clone + Copy {
     unsafe fn from_buffer(&mut self, buffer: &[u8]) -> bool {
         let self_size = std::mem::size_of::<Self>();
         if self_size == buffer.len() {
-            let src = &buffer[..] as *const u8;
+
+            let src = &buffer[..] as *const _ as *const u8;
             let dst = self as *mut _ as *mut u8;
-            unsafe { std::ptr::copy_nonoverlapping(src, dst, self_size) };
-/* rmv
-            let src = &buffer[..] as *const _ as *const Self;
-            unsafe { std::ptr::write(self, *src) };
-*/
+            std::ptr::copy_nonoverlapping(src, dst, self_size);
             true
         }
         else {
@@ -381,7 +374,7 @@ where
 ///             println!();
 ///             // Try stuffing those bytes into our struct
 ///             let mut killer = Killer::default();
-///             if killer.from_buffer(&buffer[0..actual]) {
+///             if unsafe { killer.from_buffer(&buffer[0..actual]) } {
 ///                 println!("killer = {:#?}", killer);
 ///             }
 ///             else {
