@@ -89,8 +89,13 @@ pub trait ExtractAndBuffer: Clone + Copy {
     fn to_buffer(&self, buffer: &mut [u8]) -> u8 {
         let self_size = std::mem::size_of::<Self>();
         if self_size < buffer.len() {
+            let src = self as *const _ as *const u8;
+            let dst = &mut buffer[..] as *mut u8;
+            unsafe { std::ptr::copy_nonoverlapping(src, dst, self_size) };
+/* rmv
             let dst = &mut buffer[..] as *mut _ as *mut Self;
             unsafe { std::ptr::write(dst, *self) };
+*/
             self_size as u8
         }
         else {
@@ -98,11 +103,16 @@ pub trait ExtractAndBuffer: Clone + Copy {
         }
     }
     /// nfx: Document it!
-    fn from_buffer(&mut self, buffer: &[u8]) -> bool {
+    unsafe fn from_buffer(&mut self, buffer: &[u8]) -> bool {
         let self_size = std::mem::size_of::<Self>();
         if self_size == buffer.len() {
+            let src = &buffer[..] as *const u8;
+            let dst = self as *mut _ as *mut u8;
+            unsafe { std::ptr::copy_nonoverlapping(src, dst, self_size) };
+/* rmv
             let src = &buffer[..] as *const _ as *const Self;
             unsafe { std::ptr::write(self, *src) };
+*/
             true
         }
         else {
@@ -179,6 +189,16 @@ pub(crate) fn wake(pipe: RawFd, method: WakeMethod, buffer: Option<&[u8]>) {
         match method {
             WakeMethod::Write => libc::write(pipe, data, amount),
             WakeMethod::Send => libc::send(pipe, data, amount, libc::MSG_DONTWAIT),
+/*
+    if written != amount && amount > 1
+            unsafe {
+                const MSG: &[u8] =
+                    b"Platform broken, got NULL as siginfo to signal handler. Aborting";
+                libc::write(2, MSG.as_ptr() as *const _, MSG.len());
+                libc::abort();
+            }
+*/
+
         };
     }
 }
