@@ -90,7 +90,7 @@ pub trait ExtractAndBuffer: Clone + Copy {
         let self_size = std::mem::size_of::<Self>();
         if self_size < buffer.len() {
             let src = self as *const _ as *const u8;
-            let dst = &mut buffer[..] as *mut _ as *mut u8;
+            let dst = buffer.as_mut_ptr();
             unsafe { std::ptr::copy_nonoverlapping(src, dst, self_size) };
             self_size as u8
         }
@@ -99,11 +99,11 @@ pub trait ExtractAndBuffer: Clone + Copy {
         }
     }
     /// nfx: Document it!
+    /// # Safety
     unsafe fn from_buffer(&mut self, buffer: &[u8]) -> bool {
         let self_size = std::mem::size_of::<Self>();
         if self_size == buffer.len() {
-
-            let src = &buffer[..] as *const _ as *const u8;
+            let src = buffer.as_ptr();
             let dst = self as *mut _ as *mut u8;
             std::ptr::copy_nonoverlapping(src, dst, self_size);
             true
