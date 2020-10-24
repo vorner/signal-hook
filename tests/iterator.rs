@@ -9,7 +9,7 @@ use std::sync::Arc;
 use std::thread;
 use std::time::Duration;
 
-use signal_hook::iterator::{ControllerHandle, Signals};
+use signal_hook::iterator::{Handle, Signals};
 use signal_hook::{SIGUSR1, SIGUSR2};
 
 use serial_test::serial;
@@ -22,15 +22,15 @@ fn send_sigusr2() {
     unsafe { libc::raise(SIGUSR2) };
 }
 
-fn setup_without_any_signals() -> (Signals, ControllerHandle) {
+fn setup_without_any_signals() -> (Signals, Handle) {
     let signals = Signals::new(&[]).unwrap();
-    let controller = signals.controller();
+    let controller = signals.handle();
     (signals, controller)
 }
 
-fn setup_for_sigusr2() -> (Signals, ControllerHandle) {
+fn setup_for_sigusr2() -> (Signals, Handle) {
     let signals = Signals::new(&[SIGUSR2]).unwrap();
-    let controller = signals.controller();
+    let controller = signals.handle();
     (signals, controller)
 }
 

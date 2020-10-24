@@ -64,9 +64,9 @@ pub mod v0_1 {
 
     use std::borrow::Borrow;
     use std::io::Error;
-    use std::sync::Arc;
 
-    use signal_hook::iterator::backend::{Controller, PollResult, SignalDelivery, SignalIterator};
+    pub use signal_hook::iterator::backend::Handle;
+    use signal_hook::iterator::backend::{PollResult, SignalDelivery, SignalIterator};
 
     use futures_0_1::stream::Stream;
     use futures_0_1::{Async, Poll};
@@ -76,20 +76,17 @@ pub mod v0_1 {
     use tokio_0_1::io::AsyncRead;
     use tokio_0_1::net::unix::UnixStream;
 
-    /// A shareable handle to control an associated [`Signals`] instance.
-    pub type ControllerHandle = Arc<Controller<UnixStream>>;
-
     /// An asynchronous stream of arriving signals using the tokio runtime.
     ///
     /// The stream doesn't return the signals in the order they were recieved by
     /// the process and may merge signals received multiple times.
-    pub struct Signals(SignalIterator<UnixStream, UnixStream>);
+    pub struct Signals(SignalIterator<UnixStream>);
 
     impl Signals {
         /// Create a `Signals` instance.
         ///
         /// This registers all the signals listed. The same restrictions (panics, errors) apply
-        /// as with [`add_signal`][signal_hook::iterator::Signals::add_signal].
+        /// as with [`Handle::add_signal`].
         pub fn new<I, S>(signals: I) -> Result<Self, Error>
         where
             I: IntoIterator<Item = S>,
@@ -111,12 +108,12 @@ pub mod v0_1 {
             }
         }
 
-        /// Get a shareable handle to a [`Controller`] for this instance.
+        /// Get a shareable handle to a [`Handle`] for this instance.
         ///
         /// This can be used to add further signals or close the [`Signals`] instance
         /// which terminates the whole signal stream.
-        pub fn controller(&self) -> ControllerHandle {
-            self.0.controller()
+        pub fn handle(&self) -> Handle {
+            self.0.handle()
         }
     }
 

@@ -28,7 +28,7 @@ macro_rules! implement_signals_with_pipe {
 
         /// A struct which mimics [`signal_hook::iterator::Signals`]
         /// but also allows usage together with MIO runtime.
-        pub struct Signals(SignalDelivery<Pipe, Pipe>);
+        pub struct Signals(SignalDelivery<Pipe>);
 
         pub use backend::Pending;
 
@@ -36,7 +36,7 @@ macro_rules! implement_signals_with_pipe {
             /// Create a `Signals` instance.
             ///
             /// This registers all the signals listed. The same restrictions (panics, errors) apply
-            /// as with [`Controller::add_signal`][backend::Controller::add_signal].
+            /// as with [`Handle::add_signal`][backend::Handle::add_signal].
             pub fn new<I, S>(signals: I) -> Result<Self, Error>
             where
                 I: IntoIterator<Item = S>,
@@ -50,9 +50,9 @@ macro_rules! implement_signals_with_pipe {
             /// Registers another signal to the set watched by this [`Signals`] instance.
             ///
             /// The same restrictions (panics, errors) apply as with
-            /// [`Controller::add_signal`][backend::Controller::add_signal].
+            /// [`Handle::add_signal`][backend::Handle::add_signal].
             pub fn add_signal(&self, signal: c_int) -> Result<(), Error> {
-                self.0.controller().add_signal(signal)
+                self.0.handle().add_signal(signal)
             }
 
             /// Returns an iterator of already received signals.

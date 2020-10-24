@@ -149,9 +149,8 @@
 //! If you are looking for integration with an asynchronous runtime take a look at one of the
 //! following adapter crates:
 //!
-//! * [`signal-hook-mio`](https://docs.rs/signal-hook-mio) for mio support
-//! * [`signal-hook-mio-0_6`](https://docs.rs/signal-hook-mio-0_6) for mio 0.6 support
-//! * [`signal-hook-tokio-0_1`](https://docs.rs/signal-hook-tokio-0_1) for tokio 0.1 support
+//! * [`signal-hook-mio`](https://docs.rs/signal-hook-mio) for MIO support
+//! * [`signal-hook-tokio`](https://docs.rs/signal-hook-tokio) for Tokio support
 //!
 //! Feel free to open a pull requests if you want to add support for runtimes not mentioned above.
 

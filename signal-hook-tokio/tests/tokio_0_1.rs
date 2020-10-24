@@ -62,7 +62,7 @@ fn delayed() {
 #[serial]
 fn close_signal_stream() {
     let mut signals = Signals::new(&[signal_hook::SIGUSR1, signal_hook::SIGUSR2]).unwrap();
-    signals.controller().close();
+    signals.handle().close();
 
     let async_result = signals.poll().unwrap();
 

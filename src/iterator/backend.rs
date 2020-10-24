@@ -18,6 +18,7 @@
 //! contained in the adapter libraries instead.
 
 use std::borrow::Borrow;
+use std::fmt::Debug;
 use std::io::Error;
 use std::os::unix::io::AsRawFd;
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -31,70 +32,69 @@ use crate::SigId;
 /// Maximal signal number we support.
 const MAX_SIGNUM: usize = 128;
 
-#[derive(Debug)]
-struct Waker<W> {
-    pending: Arc<[AtomicBool]>,
-    write: W,
+trait SelfPipeWrite: Debug {
+    fn wake_readers(&self);
 }
 
-impl<W: AsRawFd> Waker<W> {
-    /// Create a new instance for the given read and write pipe ends.
-    fn new(write: W) -> Self {
-        let pending: Arc<[AtomicBool]> = (0..MAX_SIGNUM)
-            .map(|_| AtomicBool::new(false))
-            .collect::<Vec<AtomicBool>>()
-            .into();
-
-        Self { pending, write }
-    }
-
-    /// Get a [`Pending`](struct.Pending) instance for iterating through recieved signals.
-    fn pending(&self) -> Pending {
-        Pending::new(Arc::clone(&self.pending))
-    }
-
-    /// Sends a wakeup signal to the internal wakeup pipe.
-    fn wake(&self) {
-        pipe::wake(self.write.as_raw_fd(), WakeMethod::Send);
+impl<W: AsRawFd + Debug> SelfPipeWrite for W {
+    fn wake_readers(&self) {
+        pipe::wake(self.as_raw_fd(), WakeMethod::Send);
     }
 }
 
 #[derive(Debug)]
-struct RegisteredSignals(Mutex<Vec<Option<SigId>>>);
+struct DeliveryState {
+    closed: AtomicBool,
+    registered_signal_ids: Mutex<Vec<Option<SigId>>>,
+}
 
-impl Drop for RegisteredSignals {
+impl DeliveryState {
+    fn new() -> Self {
+        let ids = (0..MAX_SIGNUM).map(|_| None).collect();
+        Self {
+            closed: AtomicBool::new(false),
+            registered_signal_ids: Mutex::new(ids),
+        }
+    }
+}
+
+impl Drop for DeliveryState {
     fn drop(&mut self) {
-        let lock = self.0.lock().unwrap();
+        let lock = self.registered_signal_ids.lock().unwrap();
         for id in lock.iter().filter_map(|s| *s) {
             crate::unregister(id);
         }
     }
 }
 
-/// A struct to control an associated [`SignalDelivery`] or
-/// [`SignalIterator`] instance.
+/// A struct to control an instance of an associated type
+/// (like for example [`Signals`][super::Signals]).
 ///
 /// It allows to register more signal handlers and to shutdown the signal
-/// delivery. You may retrieve an instance of this type from the
-/// [`SignalDelivery::controller`] method.
-#[derive(Debug)]
-pub struct Controller<W> {
-    waker: Arc<Waker<W>>,
-    closed: AtomicBool,
-    registerd_signal_ids: RegisteredSignals,
+/// delivery. You can [`clone`][Handle::clone] this type which isn't a
+/// very expensive operation. The cloned instances can be shared between
+/// multiple threads.
+#[derive(Debug, Clone)]
+pub struct Handle {
+    pending: Arc<[AtomicBool]>,
+    write: Arc<dyn SelfPipeWrite + Send + Sync>,
+    delivery_state: Arc<DeliveryState>,
 }
 
-impl<W> Controller<W>
-where
-    W: 'static + AsRawFd + Send + Sync,
-{
-    fn new(write: W) -> Self {
-        let waker = Arc::new(Waker::new(write));
-        let ids = (0..MAX_SIGNUM).map(|_| None).collect();
+impl Handle {
+    fn new<W>(write: W) -> Self
+    where
+        W: 'static + AsRawFd + Debug + Send + Sync,
+    {
+        let pending: Arc<[AtomicBool]> = (0..MAX_SIGNUM)
+            .map(|_| AtomicBool::new(false))
+            .collect::<Vec<AtomicBool>>()
+            .into();
+
         Self {
-            waker,
-            closed: AtomicBool::new(false),
-            registerd_signal_ids: RegisteredSignals(Mutex::new(ids)),
+            pending,
+            write: Arc::new(write),
+            delivery_state: Arc::new(DeliveryState::new()),
         }
     }
 
@@ -119,16 +119,17 @@ where
             "Signal number {} too large. If your OS really supports such signal, file a bug",
             signal,
         );
-        let mut lock = self.registerd_signal_ids.0.lock().unwrap();
+        let mut lock = self.delivery_state.registered_signal_ids.lock().unwrap();
         // Already registered, ignoring
         if lock[signal as usize].is_some() {
             return Ok(());
         }
 
-        let waker = Arc::clone(&self.waker);
+        let pending = Arc::clone(&self.pending);
+        let write = Arc::clone(&self.write);
         let action = move || {
-            waker.pending[signal as usize].store(true, Ordering::SeqCst);
-            waker.wake();
+            pending[signal as usize].store(true, Ordering::SeqCst);
+            write.wake_readers();
         };
         let id = unsafe { crate::register(signal, action) }?;
         lock[signal as usize] = Some(id);
@@ -137,27 +138,27 @@ where
 
     /// Closes the associated instance.
     ///
-    /// This is meant to signalize [`SignalDelivery`] or [`SignalIterator`]
-    /// instances termination. After calling close:
+    /// This is meant to signalize termination of the signal delivery process.
+    /// After calling close:
     ///
-    /// * [`is_closed`][Controller::is_closed] will return true.
-    /// * All currently blocking operations of [`SignalDelivery`] or [`SignalIterator`]
-    ///   instances are interrupted and terminate.
+    /// * [`is_closed`][Handle::is_closed] will return true.
+    /// * All currently blocking operations of associated instances
+    ///   are interrupted and terminate.
     /// * Any further operations will not block.
     /// * Further signals may or may not be returned from the iterators. However, if any are
     ///   returned, these are real signals that happened.
     ///
     /// The goal is to be able to shut down any background thread that handles only the signals.
     pub fn close(&self) {
-        self.closed.store(true, Ordering::SeqCst);
-        self.waker.wake();
+        self.delivery_state.closed.store(true, Ordering::SeqCst);
+        self.write.wake_readers();
     }
 
     /// Is it closed?
     ///
-    /// See [`close`][Controller::close].
+    /// See [`close`][Handle::close].
     pub fn is_closed(&self) -> bool {
-        self.closed.load(Ordering::SeqCst)
+        self.delivery_state.closed.load(Ordering::SeqCst)
     }
 }
 
@@ -166,15 +167,14 @@ where
 /// [`with_pipe`][SignalDelivery::with_pipe] method for requirements
 /// for the IO type.
 #[derive(Debug)]
-pub struct SignalDelivery<R, W> {
+pub struct SignalDelivery<R> {
     read: R,
-    controller: Arc<Controller<W>>,
+    handle: Handle,
 }
 
-impl<R, W> SignalDelivery<R, W>
+impl<R> SignalDelivery<R>
 where
     R: 'static + AsRawFd + Send + Sync,
-    W: 'static + AsRawFd + Send + Sync,
 {
     /// Creates the `SignalDelivery` structure.
     ///
@@ -182,7 +182,7 @@ where
     /// for communication between the signal handler and main program flow.
     ///
     /// Registers all the signals listed. The same restrictions (panics, errors) apply as with
-    /// [`add_signal`][Controller::add_signal].
+    /// [`add_signal`][Handle::add_signal].
     ///
     /// # Requirements for the pipe type
     ///
@@ -192,15 +192,16 @@ where
     ///   reading bytes from the read end
     ///
     /// So UnixStream is a good choice for this.
-    pub fn with_pipe<I, S>(read: R, write: W, signals: I) -> Result<Self, Error>
+    pub fn with_pipe<I, S, W>(read: R, write: W, signals: I) -> Result<Self, Error>
     where
         I: IntoIterator<Item = S>,
         S: Borrow<c_int>,
+        W: 'static + AsRawFd + Debug + Send + Sync,
     {
-        let controller = Arc::new(Controller::new(write));
-        let me = Self { read, controller };
+        let handle = Handle::new(write);
+        let me = Self { read, handle };
         for sig in signals {
-            me.controller.add_signal(*sig.borrow())?;
+            me.handle.add_signal(*sig.borrow())?;
         }
         Ok(me)
     }
@@ -255,7 +256,7 @@ where
     /// there are no signals ready.
     pub fn pending(&mut self) -> Pending {
         self.flush();
-        self.controller.waker.pending()
+        Pending::new(Arc::clone(&self.handle.pending))
     }
 
     /// Checks the reading end of the self pipe for available signals.
@@ -271,26 +272,23 @@ where
     where
         F: FnMut(&mut R) -> Result<bool, Error>,
     {
-        if self.controller.is_closed() {
+        if self.handle.is_closed() {
             return Ok(None);
         }
 
         match has_signals(self.get_read_mut()) {
             Ok(false) => Ok(None),
-            Ok(true) => {
-                self.flush();
-                Ok(Some(self.controller.waker.pending()))
-            }
+            Ok(true) => Ok(Some(self.pending())),
             Err(err) => Err(err),
         }
     }
 
-    /// Get a handle to a [`Controller`] for this `SignalDelivery` instance.
+    /// Get a [`Handle`] for this `SignalDelivery` instance.
     ///
     /// This can be used to add further signals or close the whole
     /// signal delivery mechanism.
-    pub fn controller(&self) -> Arc<Controller<W>> {
-        Arc::clone(&self.controller)
+    pub fn handle(&self) -> Handle {
+        self.handle.clone()
     }
 }
 
@@ -344,19 +342,18 @@ pub enum PollResult {
 }
 
 /// An infinite iterator of received signals.
-pub struct SignalIterator<R, W> {
-    signals: SignalDelivery<R, W>,
+pub struct SignalIterator<R> {
+    signals: SignalDelivery<R>,
     iter: Pending,
 }
 
-impl<R, W> SignalIterator<R, W>
+impl<R> SignalIterator<R>
 where
     R: 'static + AsRawFd + Send + Sync,
-    W: 'static + AsRawFd + Send + Sync,
 {
     /// Create a new infinite iterator for signals registered with the passed
     /// in [`SignalDelivery`] instance.
-    pub fn new(mut signals: SignalDelivery<R, W>) -> Self {
+    pub fn new(mut signals: SignalDelivery<R>) -> Self {
         let iter = signals.pending();
         Self { signals, iter }
     }
@@ -370,8 +367,8 @@ where
     /// [`PollResult::Pending`] and assume it will be called again at a later point in time.
     /// The callback may be called any number of times by this function.
     ///
-    /// If the iterator was closed by the [`close`][Controller::close] method of the associtated
-    /// [`Controller`] this method will return [`PollResult::Closed`].
+    /// If the iterator was closed by the [`close`][Handle::close] method of the associtated
+    /// [`Handle`] this method will return [`PollResult::Closed`].
     pub fn poll_signal<F>(&mut self, has_signals: &mut F) -> PollResult
     where
         F: FnMut(&mut R) -> Result<bool, Error>,
@@ -379,7 +376,7 @@ where
         // The loop is necessary because it is possible that a signal was already consumed
         // by a previous pending iterator due to the asynchronous nature of signals and
         // always moving to the end of the iterator before calling has_more.
-        while !self.signals.controller.is_closed() {
+        while !self.signals.handle.is_closed() {
             if let Some(result) = self.iter.next() {
                 return PollResult::Signal(result);
             }
@@ -394,17 +391,17 @@ where
         PollResult::Closed
     }
 
-    /// Get a shareable handle to a [`Controller`] for this instance.
+    /// Get a shareable [`Handle`] for this instance.
     ///
     /// This can be used to add further signals or terminate the whole
-    /// signal iteration using the [`close`][Controller::close] method.
-    pub fn controller(&self) -> Arc<Controller<W>> {
-        self.signals.controller()
+    /// signal iteration using the [`close`][Handle::close] method.
+    pub fn handle(&self) -> Handle {
+        self.signals.handle()
     }
 
     /// Consume this iterator and return the inner
     /// [`SignalDelivery`] instance.
-    pub fn into_inner(self) -> SignalDelivery<R, W> {
+    pub fn into_inner(self) -> SignalDelivery<R> {
         self.signals
     }
 }
