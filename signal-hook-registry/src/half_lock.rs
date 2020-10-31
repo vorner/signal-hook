@@ -39,6 +39,8 @@ use std::sync::atomic::{self, AtomicPtr, AtomicUsize, Ordering};
 use std::sync::{Mutex, MutexGuard, PoisonError};
 use std::thread;
 
+use libc;
+
 const YIELD_EVERY: usize = 16;
 const MAX_GUARDS: usize = (isize::MAX) as usize;
 
