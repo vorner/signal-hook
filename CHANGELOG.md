@@ -1,12 +1,12 @@
-# registry-Unreleased
-
-* Drop dependency on arc-swap (only very small subset used and arc-swap would
-  like to drop that part anyway).
-
 # Unreleased
 
 * (Breaking) `pipe::register_raw` now takes ownership and tries to use send
   first, falls back to `O_NONBLOCK` and `write` on failure.
+
+# registry-1.2.2
+
+* Drop dependency on arc-swap (only very small subset used and arc-swap would
+  like to drop that part anyway).
 
 # registry-1.2.1
 

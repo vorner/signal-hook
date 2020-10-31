@@ -1,5 +1,5 @@
 #![doc(
-    html_root_url = "https://docs.rs/signal-hook-registry/1.2.1/signal-hook-registry/",
+    html_root_url = "https://docs.rs/signal-hook-registry/1.2.2/signal-hook-registry/",
     test(attr(deny(warnings)))
 )]
 #![warn(missing_docs)]
