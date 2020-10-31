@@ -32,11 +32,11 @@ use crate::SigId;
 /// Maximal signal number we support.
 const MAX_SIGNUM: usize = 128;
 
-trait SelfPipeWrite: Debug {
+trait SelfPipeWrite: Debug + Send + Sync {
     fn wake_readers(&self);
 }
 
-impl<W: AsRawFd + Debug> SelfPipeWrite for W {
+impl<W: AsRawFd + Debug + Send + Sync> SelfPipeWrite for W {
     fn wake_readers(&self) {
         pipe::wake(self.as_raw_fd(), WakeMethod::Send);
     }
@@ -77,14 +77,14 @@ impl Drop for DeliveryState {
 #[derive(Debug, Clone)]
 pub struct Handle {
     pending: Arc<[AtomicBool]>,
-    write: Arc<dyn SelfPipeWrite + Send + Sync>,
+    write: Arc<dyn SelfPipeWrite>,
     delivery_state: Arc<DeliveryState>,
 }
 
 impl Handle {
     fn new<W>(write: W) -> Self
     where
-        W: 'static + AsRawFd + Debug + Send + Sync,
+        W: 'static + SelfPipeWrite,
     {
         let pending: Arc<[AtomicBool]> = (0..MAX_SIGNUM)
             .map(|_| AtomicBool::new(false))
