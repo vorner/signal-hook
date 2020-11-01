@@ -28,7 +28,7 @@ macro_rules! implement_signals_with_pipe {
 
         /// A struct which mimics [`signal_hook::iterator::Signals`]
         /// but also allows usage together with MIO runtime.
-        pub struct Signals(SignalDelivery<Pipe, Pipe>);
+        pub struct Signals(SignalDelivery<Pipe>);
 
         pub use backend::Pending;
 
@@ -36,7 +36,7 @@ macro_rules! implement_signals_with_pipe {
             /// Create a `Signals` instance.
             ///
             /// This registers all the signals listed. The same restrictions (panics, errors) apply
-            /// as with [`add_signal`][Signals::add_signal].
+            /// as with [`Handle::add_signal`][backend::Handle::add_signal].
             pub fn new<I, S>(signals: I) -> Result<Self, Error>
             where
                 I: IntoIterator<Item = S>,
@@ -49,20 +49,10 @@ macro_rules! implement_signals_with_pipe {
 
             /// Registers another signal to the set watched by this [`Signals`] instance.
             ///
-            /// # Notes
-            ///
-            /// * This is safe to call concurrently from whatever thread.
-            /// * This is *not* safe to call from within a signal handler.
-            /// * If the signal number was already registered previously, this is a no-op.
-            /// * If this errors, the original set of signals is left intact.
-            ///
-            /// # Panics
-            ///
-            /// * If the given signal is [forbidden][signal_hook::FORBIDDEN].
-            /// * If the signal number is negative or larger than internal limit. The limit should be
-            ///   larger than any supported signal the OS supports.
+            /// The same restrictions (panics, errors) apply as with
+            /// [`Handle::add_signal`][backend::Handle::add_signal].
             pub fn add_signal(&self, signal: c_int) -> Result<(), Error> {
-                self.0.add_signal(signal)
+                self.0.handle().add_signal(signal)
             }
 
             /// Returns an iterator of already received signals.
@@ -74,9 +64,8 @@ macro_rules! implement_signals_with_pipe {
             ///
             /// This method returns immediately (does not block) and may produce an empty iterator if there
             /// are no signals ready. So you should register an instance of this struct at an instance of
-            /// [`mio::Poll`] to query for readability of the underlying self pipe. The following example
-            /// shows this approach.
-            pub fn pending(&self) -> Pending {
+            /// [`mio::Poll`] to query for readability of the underlying self pipe.
+            pub fn pending(&mut self) -> Pending {
                 self.0.pending()
             }
         }
@@ -135,10 +124,7 @@ macro_rules! implement_signals_with_pipe {
 /// ```
 #[cfg(feature = "support-v0_7")]
 pub mod v0_7 {
-    use std::os::unix::io::AsRawFd;
-
     use mio::event::Source;
-    use mio::unix::SourceFd;
     use mio::{Interest, Registry, Token};
     use mio_0_7 as mio;
 
@@ -151,7 +137,7 @@ pub mod v0_7 {
             token: Token,
             interest: Interest,
         ) -> Result<(), Error> {
-            SourceFd(&self.0.get_read().as_raw_fd()).register(registry, token, interest)
+            self.0.get_read_mut().register(registry, token, interest)
         }
 
         fn reregister(
@@ -160,11 +146,11 @@ pub mod v0_7 {
             token: Token,
             interest: Interest,
         ) -> Result<(), Error> {
-            SourceFd(&self.0.get_read().as_raw_fd()).reregister(registry, token, interest)
+            self.0.get_read_mut().reregister(registry, token, interest)
         }
 
         fn deregister(&mut self, registry: &Registry) -> Result<(), Error> {
-            SourceFd(&self.0.get_read().as_raw_fd()).deregister(registry)
+            self.0.get_read_mut().deregister(registry)
         }
     }
 }

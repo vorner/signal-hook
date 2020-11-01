@@ -65,6 +65,7 @@ pub mod v0_1 {
     use std::borrow::Borrow;
     use std::io::Error;
 
+    pub use signal_hook::iterator::backend::Handle;
     use signal_hook::iterator::backend::{PollResult, SignalDelivery, SignalIterator};
 
     use futures_0_1::stream::Stream;
@@ -79,13 +80,13 @@ pub mod v0_1 {
     ///
     /// The stream doesn't return the signals in the order they were recieved by
     /// the process and may merge signals received multiple times.
-    pub struct Signals(SignalIterator<UnixStream, UnixStream>);
+    pub struct Signals(SignalIterator<UnixStream>);
 
     impl Signals {
         /// Create a `Signals` instance.
         ///
         /// This registers all the signals listed. The same restrictions (panics, errors) apply
-        /// as with [`add_signal`][signal_hook::iterator::Signals::add_signal].
+        /// as with [`Handle::add_signal`].
         pub fn new<I, S>(signals: I) -> Result<Self, Error>
         where
             I: IntoIterator<Item = S>,
@@ -99,12 +100,20 @@ pub mod v0_1 {
         /// Check if signals arrived by polling the stream for some bytes.
         ///
         /// Returns true if it was possible to read a byte and false otherwise.
-        fn has_signals(mut read: &UnixStream) -> Result<bool, Error> {
+        fn has_signals(read: &mut UnixStream) -> Result<bool, Error> {
             match read.poll_read(&mut [0u8]) {
                 Poll::Ok(Async::NotReady) => Ok(false),
                 Poll::Ok(Async::Ready(num_read)) => Ok(num_read > 0),
                 Poll::Err(error) => Err(error),
             }
+        }
+
+        /// Get a shareable handle to a [`Handle`] for this instance.
+        ///
+        /// This can be used to add further signals or close the [`Signals`] instance
+        /// which terminates the whole signal stream.
+        pub fn handle(&self) -> Handle {
+            self.0.handle()
         }
     }
 

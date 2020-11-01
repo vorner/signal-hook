@@ -1,7 +1,8 @@
 //! An iterator over incoming signals.
 //!
-//! This provides a higher abstraction over the signals, providing a structure
-//! ([`Signals`](struct.Signals.html)) able to iterate over the incoming signals.
+//! This provides a higher abstraction over the signals, providing
+//! the [`Signals`] structure which is able to iterate over the
+//! incoming signals.
 //!
 //! # Examples
 //!
@@ -14,7 +15,7 @@
 //! use signal_hook::iterator::Signals;
 //!
 //! fn main() -> Result<(), Error> {
-//!     let signals = Signals::new(&[
+//!     let mut signals = Signals::new(&[
 //!         signal_hook::SIGHUP,
 //!         signal_hook::SIGTERM,
 //!         signal_hook::SIGINT,
@@ -54,8 +55,8 @@ use std::os::unix::net::UnixStream;
 
 use libc::{self, c_int};
 
-use self::backend::PollResult;
-pub use self::backend::{Pending, SignalDelivery, SignalIterator};
+pub use self::backend::{Handle, Pending};
+use self::backend::{PollResult, SignalDelivery, SignalIterator};
 
 /// The main structure of the module, representing interest in some signals.
 ///
@@ -63,17 +64,16 @@ pub use self::backend::{Pending, SignalDelivery, SignalIterator};
 /// them on drop. It provides the pending signals during its lifetime, either in batches or as an
 /// infinite iterator.
 ///
-/// # Multiple consumers
+/// # Multiple threads
 ///
-/// You may have noticed this structure can be used simultaneously by multiple threads. If it is
-/// done, a signal arrives to one of the threads (on the first come, first serve basis). The signal
-/// is *not* broadcasted to all currently active threads.
+/// Instances of this struct can be [sent][std::marker::Send] to other threads. In a multithreaded
+/// application this can be used to dedicate a separate thread for signal handling. In this case
+/// you should get a [`Handle`] using the [`handle`][Signals::handle] method before sending the
+/// `Signals` instance to a background thread. With the handle you will be able to shut down the
+/// background thread later.
 ///
-/// A similar thing applies to cloning the structure ‒ at least one of the copies gets the signal,
-/// but it is not broadcasted to all of them.
-///
-/// If you need multiple recipients, you can create multiple independent instances (not by cloning,
-/// but by the constructor).
+/// The controller handle can be shared between as many threads as you like using its
+/// [`clone`][Handle::clone] method.
 ///
 /// # Examples
 ///
@@ -87,8 +87,9 @@ pub use self::backend::{Pending, SignalDelivery, SignalIterator};
 /// #
 /// # fn main() -> Result<(), Error> {
 /// let signals = Signals::new(&[signal_hook::SIGUSR1, signal_hook::SIGUSR2])?;
+/// let handle = signals.handle();
 /// thread::spawn(move || {
-///     for signal in &signals {
+///     for signal in signals {
 ///         match signal {
 ///             signal_hook::SIGUSR1 => {},
 ///             signal_hook::SIGUSR2 => {},
@@ -96,48 +97,33 @@ pub use self::backend::{Pending, SignalDelivery, SignalIterator};
 ///         }
 ///     }
 /// });
+/// handle.close();
 /// # Ok(())
 /// # }
 /// ```
-#[derive(Debug, Clone)]
-pub struct Signals(SignalDelivery<UnixStream, UnixStream>);
-
-type Forever = SignalIterator<UnixStream, UnixStream>;
+#[derive(Debug)]
+pub struct Signals(SignalDelivery<UnixStream>);
 
 impl Signals {
     /// Creates the `Signals` structure.
     ///
     /// This registers all the signals listed. The same restrictions (panics, errors) apply as
-    /// with [`add_signal`](#method.add_signal).
+    /// for the [`Handle::add_signal`] method.
     pub fn new<I, S>(signals: I) -> Result<Self, Error>
     where
         I: IntoIterator<Item = S>,
         S: Borrow<c_int>,
     {
         let (read, write) = UnixStream::pair()?;
-        Ok(Signals(backend::SignalDelivery::with_pipe(
-            read, write, signals,
-        )?))
+        Ok(Signals(SignalDelivery::with_pipe(read, write, signals)?))
     }
 
     /// Registers another signal to the set watched by this [`Signals`] instance.
     ///
-    /// # Notes
-    ///
-    /// * This is safe to call concurrently from whatever thread.
-    /// * This is *not* safe to call from within a signal handler.
-    /// * If the signal number was already registered previously, this is a no-op.
-    /// * If this errors, the original set of signals is left intact.
-    /// * This actually registers the signal into the whole group of [`Signals`] cloned from each
-    ///   other, so any of them might start receiving the signals.
-    ///
-    /// # Panics
-    ///
-    /// * If the given signal is [forbidden][crate::FORBIDDEN].
-    /// * If the signal number is negative or larger than internal limit. The limit should be
-    ///   larger than any supported signal the OS supports.
+    /// The same restrictions (panics, errors) apply as for the [`Handle::add_signal`]
+    /// method.
     pub fn add_signal(&self, signal: c_int) -> Result<(), Error> {
-        self.0.add_signal(signal)
+        self.handle().add_signal(signal)
     }
 
     /// Returns an iterator of already received signals.
@@ -149,14 +135,14 @@ impl Signals {
     ///
     /// This method returns immediately (does not block) and may produce an empty iterator if there
     /// are no signals ready.
-    pub fn pending(&self) -> Pending {
+    pub fn pending(&mut self) -> Pending {
         self.0.pending()
     }
 
     /// Block until the stream contains some bytes.
     ///
     /// Returns true if it was possible to read a byte and false otherwise.
-    fn has_signals(mut read: &UnixStream) -> Result<bool, Error> {
+    fn has_signals(read: &mut UnixStream) -> Result<bool, Error> {
         loop {
             match read.read(&mut [0u8]) {
                 Ok(num_read) => break Ok(num_read > 0),
@@ -173,14 +159,15 @@ impl Signals {
 
     /// Waits for some signals to be available and returns an iterator.
     ///
-    /// This is similar to [`pending`](#method.pending). If there are no signals available, it
+    /// This is similar to [`pending`][Signals::pending]. If there are no signals available, it
     /// tries to wait for some to arrive. However, due to implementation details, this still can
     /// produce an empty iterator.
     ///
-    /// This can block for arbitrary long time.
+    /// This can block for arbitrary long time. If the [`Handle::close`] method is used in
+    /// another thread this method will return immediately.
     ///
     /// Note that the blocking is done in this method, not in the iterator.
-    pub fn wait(&self) -> Pending {
+    pub fn wait(&mut self) -> Pending {
         match self.0.poll_pending(&mut Self::has_signals) {
             Ok(Some(pending)) => pending,
             // Because of the blocking has_signals method the poll_pending method
@@ -193,16 +180,23 @@ impl Signals {
         }
     }
 
-    /// Returns an infinite iterator over arriving signals.
+    /// Is it closed?
+    ///
+    /// See [`close`][Handle::close].
+    pub fn is_closed(&self) -> bool {
+        self.handle().is_closed()
+    }
+
+    /// Consume this instance and return an infinite iterator over arriving signals.
     ///
     /// The iterator's `next()` blocks as necessary to wait for signals to arrive. This is adequate
     /// if you want to designate a thread solely to handling signals. If multiple signals come at
     /// the same time (between two values produced by the iterator), they will be returned in
     /// arbitrary order. Multiple instances of the same signal may be collated.
     ///
-    /// This is also the iterator returned by `IntoIterator` implementation on `&Signals`.
+    /// This is also the iterator returned by `IntoIterator` implementation on `Signals`.
     ///
-    /// This iterator terminates only if the [`Signals`] is explicitly [closed][Signals::close].
+    /// This iterator terminates only if explicitly [closed][Handle::close].
     ///
     /// # Examples
     ///
@@ -217,6 +211,7 @@ impl Signals {
     ///
     /// # fn main() -> Result<(), Error> {
     /// let signals = Signals::new(&[signal_hook::SIGUSR1, signal_hook::SIGUSR2])?;
+    /// let handle = signals.handle();
     /// thread::spawn(move || {
     ///     for signal in signals.forever() {
     ///         match signal {
@@ -226,60 +221,23 @@ impl Signals {
     ///         }
     ///     }
     /// });
+    /// handle.close();
     /// # Ok(())
     /// # }
     /// ```
-    pub fn forever(&self) -> Forever {
-        Forever::new(self.0.clone())
+    pub fn forever(self) -> Forever {
+        Forever(SignalIterator::new(self.0))
     }
 
-    /// Is it closed?
+    /// Get a shareable handle to a [`Handle`] for this instance.
     ///
-    /// See [`close`][Signals::close].
-    pub fn is_closed(&self) -> bool {
-        self.0.is_closed()
-    }
-
-    /// Closes the instance.
-    ///
-    /// This is meant to signalize termination through all the interrelated instances
-    /// (e. g. cloning a [`Signals`] instance). After calling close:
-    ///
-    /// * [`is_closed`][Signals::is_closed] will return true.
-    /// * All currently blocking operations on all threads and all the instances are interrupted
-    ///   and terminate.
-    /// * Any further operations will never block.
-    /// * Further signals may or may not be returned from the iterators. However, if any are
-    ///   returned, these are real signals that happened.
-    /// * The [`forever`][Signals::forever] terminates (follows from the above).
-    ///
-    /// The goal is to be able to shut down any background thread that handles only the signals.
-    ///
-    /// ```rust
-    /// # use signal_hook::iterator::Signals;
-    /// # use signal_hook::SIGUSR1;
-    /// # fn main() -> Result<(), std::io::Error> {
-    /// let signals = Signals::new(&[SIGUSR1])?;
-    /// let signals_bg = signals.clone();
-    /// let thread = std::thread::spawn(move || {
-    ///     for signal in &signals_bg {
-    ///         // Whatever with the signal
-    /// #       let _ = signal;
-    ///     }
-    /// });
-    ///
-    /// signals.close();
-    ///
-    /// // The thread will terminate on its own now (the for cycle runs out of signals).
-    /// thread.join().expect("background thread panicked");
-    /// # Ok(()) }
-    /// ```
-    pub fn close(&self) {
-        self.0.close()
+    /// This can be used to add further signals or close the [`Signals`] instance.
+    pub fn handle(&self) -> Handle {
+        self.0.handle()
     }
 }
 
-impl<'a> IntoIterator for &'a Signals {
+impl IntoIterator for Signals {
     type Item = c_int;
     type IntoIter = Forever;
     fn into_iter(self) -> Self::IntoIter {
@@ -287,11 +245,22 @@ impl<'a> IntoIterator for &'a Signals {
     }
 }
 
+/// An infinit iterator of arriving signals.
+pub struct Forever(SignalIterator<UnixStream>);
+
+impl Forever {
+    /// Consume this iterator and return the inner
+    /// [`Signals`] instance.
+    pub fn into_inner(self) -> Signals {
+        Signals(self.0.into_inner())
+    }
+}
+
 impl Iterator for Forever {
     type Item = c_int;
 
     fn next(&mut self) -> Option<c_int> {
-        match self.poll_signal(&mut Signals::has_signals) {
+        match self.0.poll_signal(&mut Signals::has_signals) {
             PollResult::Signal(result) => Some(result),
             PollResult::Closed => None,
             PollResult::Pending => unreachable!(

@@ -18,6 +18,7 @@
 //! contained in the adapter libraries instead.
 
 use std::borrow::Borrow;
+use std::fmt::Debug;
 use std::io::Error;
 use std::os::unix::io::AsRawFd;
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -31,17 +32,60 @@ use crate::SigId;
 /// Maximal signal number we support.
 const MAX_SIGNUM: usize = 128;
 
-#[derive(Debug)]
-struct Waker<R, W> {
-    pending: Arc<[AtomicBool]>,
-    closed: AtomicBool,
-    read: R,
-    write: W,
+trait SelfPipeWrite: Debug + Send + Sync {
+    fn wake_readers(&self);
 }
 
-impl<R, W: AsRawFd> Waker<R, W> {
-    /// Create a new instance for the given read and write pipe ends.
-    fn new(read: R, write: W) -> Self {
+impl<W: AsRawFd + Debug + Send + Sync> SelfPipeWrite for W {
+    fn wake_readers(&self) {
+        pipe::wake(self.as_raw_fd(), WakeMethod::Send);
+    }
+}
+
+#[derive(Debug)]
+struct DeliveryState {
+    closed: AtomicBool,
+    registered_signal_ids: Mutex<Vec<Option<SigId>>>,
+}
+
+impl DeliveryState {
+    fn new() -> Self {
+        let ids = (0..MAX_SIGNUM).map(|_| None).collect();
+        Self {
+            closed: AtomicBool::new(false),
+            registered_signal_ids: Mutex::new(ids),
+        }
+    }
+}
+
+impl Drop for DeliveryState {
+    fn drop(&mut self) {
+        let lock = self.registered_signal_ids.lock().unwrap();
+        for id in lock.iter().filter_map(|s| *s) {
+            crate::unregister(id);
+        }
+    }
+}
+
+/// A struct to control an instance of an associated type
+/// (like for example [`Signals`][super::Signals]).
+///
+/// It allows to register more signal handlers and to shutdown the signal
+/// delivery. You can [`clone`][Handle::clone] this type which isn't a
+/// very expensive operation. The cloned instances can be shared between
+/// multiple threads.
+#[derive(Debug, Clone)]
+pub struct Handle {
+    pending: Arc<[AtomicBool]>,
+    write: Arc<dyn SelfPipeWrite>,
+    delivery_state: Arc<DeliveryState>,
+}
+
+impl Handle {
+    fn new<W>(write: W) -> Self
+    where
+        W: 'static + SelfPipeWrite,
+    {
         let pending: Arc<[AtomicBool]> = (0..MAX_SIGNUM)
             .map(|_| AtomicBool::new(false))
             .collect::<Vec<AtomicBool>>()
@@ -49,94 +93,12 @@ impl<R, W: AsRawFd> Waker<R, W> {
 
         Self {
             pending,
-            closed: AtomicBool::new(false),
-            read,
-            write,
+            write: Arc::new(write),
+            delivery_state: Arc::new(DeliveryState::new()),
         }
     }
 
-    /// Get a [`Pending`](struct.Pending) instance for iterating through recieved signals.
-    fn pending(&self) -> Pending {
-        Pending::new(Arc::clone(&self.pending))
-    }
-
-    /// Sends a wakeup signal to the internal wakeup pipe.
-    fn wake(&self) {
-        pipe::wake(self.write.as_raw_fd(), WakeMethod::Send);
-    }
-}
-
-#[derive(Debug)]
-struct RegisteredSignals(Mutex<Vec<Option<SigId>>>);
-
-impl Drop for RegisteredSignals {
-    fn drop(&mut self) {
-        let lock = self.0.lock().unwrap();
-        for id in lock.iter().filter_map(|s| *s) {
-            crate::unregister(id);
-        }
-    }
-}
-
-/// A struct for delivering received signals to the main program flow.
-/// The self-pipe IO type is generic. See the [with_pipe](#method.with_pipe)
-/// method for requirements for the IO type.
-#[derive(Debug)]
-pub struct SignalDelivery<R, W> {
-    ids: Arc<RegisteredSignals>,
-    waker: Arc<Waker<R, W>>,
-}
-
-// We have to implement Clone by hand due to a known issue of
-// derive(Clone) for generic structs.
-impl<R, W> Clone for SignalDelivery<R, W> {
-    fn clone(&self) -> Self {
-        Self {
-            ids: Arc::clone(&self.ids),
-            waker: Arc::clone(&self.waker),
-        }
-    }
-}
-
-impl<R, W> SignalDelivery<R, W>
-where
-    R: 'static + AsRawFd + Send + Sync,
-    W: 'static + AsRawFd + Send + Sync,
-{
-    /// Creates the `SignalDelivery` structure.
-    ///
-    /// The read and write arguments must be the ends of a suitable pipe type. These are used
-    /// for communication between the signal handler and main program flow.
-    ///
-    /// Registers all the signals listed. The same restrictions (panics, errors) apply as with
-    /// [`add_signal`](#method.add_signal).
-    ///
-    /// # Requirements for the pipe type
-    ///
-    /// * Must support [`send`](https://man7.org/linux/man-pages/man2/send.2.html) for
-    ///   asynchronously writing bytes to the write end
-    /// * Must support [`recv`](https://man7.org/linux/man-pages/man2/recv.2.html) for
-    ///   reading bytes from the read end
-    ///
-    /// So UnixStream is a good choice for this.
-    pub fn with_pipe<I, S>(read: R, write: W, signals: I) -> Result<Self, Error>
-    where
-        I: IntoIterator<Item = S>,
-        S: Borrow<c_int>,
-    {
-        let waker = Arc::new(Waker::new(read, write));
-        let ids = (0..MAX_SIGNUM).map(|_| None).collect();
-        let me = Self {
-            ids: Arc::new(RegisteredSignals(Mutex::new(ids))),
-            waker,
-        };
-        for sig in signals {
-            me.add_signal(*sig.borrow())?;
-        }
-        Ok(me)
-    }
-
-    /// Registers another signal to the set watched by this [`Signals`] instance.
+    /// Registers another signal to the set watched by the associated instance.
     ///
     /// # Notes
     ///
@@ -144,8 +106,6 @@ where
     /// * This is *not* safe to call from within a signal handler.
     /// * If the signal number was already registered previously, this is a no-op.
     /// * If this errors, the original set of signals is left intact.
-    /// * This actually registers the signal into the whole group of [`SignalDelivery`]
-    ///   cloned from each other, so any of them might start receiving the signals.
     ///
     /// # Panics
     ///
@@ -159,20 +119,91 @@ where
             "Signal number {} too large. If your OS really supports such signal, file a bug",
             signal,
         );
-        let mut lock = self.ids.0.lock().unwrap();
+        let mut lock = self.delivery_state.registered_signal_ids.lock().unwrap();
         // Already registered, ignoring
         if lock[signal as usize].is_some() {
             return Ok(());
         }
 
-        let waker = Arc::clone(&self.waker);
+        let pending = Arc::clone(&self.pending);
+        let write = Arc::clone(&self.write);
         let action = move || {
-            waker.pending[signal as usize].store(true, Ordering::SeqCst);
-            waker.wake();
+            pending[signal as usize].store(true, Ordering::SeqCst);
+            write.wake_readers();
         };
         let id = unsafe { crate::register(signal, action) }?;
         lock[signal as usize] = Some(id);
         Ok(())
+    }
+
+    /// Closes the associated instance.
+    ///
+    /// This is meant to signalize termination of the signal delivery process.
+    /// After calling close:
+    ///
+    /// * [`is_closed`][Handle::is_closed] will return true.
+    /// * All currently blocking operations of associated instances
+    ///   are interrupted and terminate.
+    /// * Any further operations will not block.
+    /// * Further signals may or may not be returned from the iterators. However, if any are
+    ///   returned, these are real signals that happened.
+    ///
+    /// The goal is to be able to shut down any background thread that handles only the signals.
+    pub fn close(&self) {
+        self.delivery_state.closed.store(true, Ordering::SeqCst);
+        self.write.wake_readers();
+    }
+
+    /// Is it closed?
+    ///
+    /// See [`close`][Handle::close].
+    pub fn is_closed(&self) -> bool {
+        self.delivery_state.closed.load(Ordering::SeqCst)
+    }
+}
+
+/// A struct for delivering received signals to the main program flow.
+/// The self-pipe IO type is generic. See the
+/// [`with_pipe`][SignalDelivery::with_pipe] method for requirements
+/// for the IO type.
+#[derive(Debug)]
+pub struct SignalDelivery<R> {
+    read: R,
+    handle: Handle,
+}
+
+impl<R> SignalDelivery<R>
+where
+    R: 'static + AsRawFd + Send + Sync,
+{
+    /// Creates the `SignalDelivery` structure.
+    ///
+    /// The read and write arguments must be the ends of a suitable pipe type. These are used
+    /// for communication between the signal handler and main program flow.
+    ///
+    /// Registers all the signals listed. The same restrictions (panics, errors) apply as with
+    /// [`add_signal`][Handle::add_signal].
+    ///
+    /// # Requirements for the pipe type
+    ///
+    /// * Must support [`send`](https://man7.org/linux/man-pages/man2/send.2.html) for
+    ///   asynchronously writing bytes to the write end
+    /// * Must support [`recv`](https://man7.org/linux/man-pages/man2/recv.2.html) for
+    ///   reading bytes from the read end
+    ///
+    /// So UnixStream is a good choice for this.
+    pub fn with_pipe<I, S, W>(read: R, write: W, signals: I) -> Result<Self, Error>
+    where
+        I: IntoIterator<Item = S>,
+        S: Borrow<c_int>,
+        W: 'static + AsRawFd + Debug + Send + Sync,
+    {
+        let handle = Handle::new(write);
+        let me = Self { read, handle };
+        for sig in signals {
+            me.handle.add_signal(*sig.borrow())?;
+        }
+        Ok(me)
     }
 
     /// Get a reference to the read end of the self pipe
@@ -182,21 +213,20 @@ where
     /// bytes in the pipe. If the event system reports the file descriptor
     /// ready for reading you can then call [`pending`][SignalDelivery::pending]
     /// to get the arrived signals.
-    ///
-    /// # Warning
-    ///
-    /// Do not use the reference to read from it directly. Reading from the
-    /// pipe should always be done through the [`pending`][SignalDelivery::pending]
-    /// or [`poll_pending`][SignalDelivery::poll_pending] methods. Those methods
-    /// contain a special procedure to wake other cloned instances which are currently
-    /// reading from the pipe. Reading from the pipe directly will most likely break
-    /// this shutdown protocol.
     pub fn get_read(&self) -> &R {
-        &self.waker.read
+        &self.read
+    }
+
+    /// Get a mutable reference to the read end of the self pipe
+    ///
+    /// See the [`get_read`][SignalDelivery::get_read] method for some additional
+    /// information.
+    pub fn get_read_mut(&mut self) -> &mut R {
+        &mut self.read
     }
 
     /// Drains all data from the internal self-pipe. This method will never block.
-    fn flush(&self) {
+    fn flush(&mut self) {
         const SIZE: usize = 1024;
         let mut buff = [0u8; SIZE];
 
@@ -206,36 +236,27 @@ where
             // that's OK in case we say MSG_DONTWAIT. If it's EINTR, then it's OK too,
             // it'll only create a spurious wakeup.
             while libc::recv(
-                self.waker.read.as_raw_fd(),
+                self.read.as_raw_fd(),
                 buff.as_mut_ptr() as *mut libc::c_void,
                 SIZE,
                 libc::MSG_DONTWAIT,
             ) > 0
             {}
         }
-
-        if self.is_closed() {
-            // Wake any other sleeping ends
-            // (if none wait, it'll only leave garbage inside the pipe, but we'll close it soon
-            // anyway).
-            self.waker.wake();
-        }
     }
 
     /// Returns an iterator of already received signals.
     ///
     /// This returns an iterator over all the signal numbers of the signals received since last
-    /// time they were read (out of the set registered by this `Signals` instance). Note that
-    /// they are returned in arbitrary order and a signal number is returned only once even if
-    /// it was received multiple times.
+    /// time they were read (out of the set registered by this `SignalDelivery` instance). Note
+    /// that they are returned in arbitrary order and a signal number is returned only once even
+    /// if it was received multiple times.
     ///
     /// This method returns immediately (does not block) and may produce an empty iterator if
     /// there are no signals ready.
-    pub fn pending(&self) -> Pending {
-        if !self.is_closed() {
-            self.flush();
-        }
-        self.waker.pending()
+    pub fn pending(&mut self) -> Pending {
+        self.flush();
+        Pending::new(Arc::clone(&self.handle.pending))
     }
 
     /// Checks the reading end of the self pipe for available signals.
@@ -245,56 +266,35 @@ where
     /// instance wrapped inside a [`Option::Some`]. However, due to implementation details,
     /// this still can produce an empty iterator.
     ///
-    /// This method doesn't check the reading end itself but uses the passed in callback. This
-    /// method blocks if and only if the callback blocks trying to read some bytes.
-    pub fn poll_pending<F>(&self, has_signals: &mut F) -> Result<Option<Pending>, Error>
+    /// This method doesn't check the reading end by itself but uses the passed in callback.
+    /// This method blocks if and only if the callback blocks trying to read some bytes.
+    pub fn poll_pending<F>(&mut self, has_signals: &mut F) -> Result<Option<Pending>, Error>
     where
-        F: FnMut(&R) -> Result<bool, Error>,
+        F: FnMut(&mut R) -> Result<bool, Error>,
     {
-        if self.is_closed() {
+        if self.handle.is_closed() {
             return Ok(None);
         }
 
-        match has_signals(self.get_read()) {
+        match has_signals(self.get_read_mut()) {
             Ok(false) => Ok(None),
-            Ok(true) => {
-                self.flush();
-                Ok(Some(self.waker.pending()))
-            }
+            Ok(true) => Ok(Some(self.pending())),
             Err(err) => Err(err),
         }
     }
 
-    /// Is it closed?
+    /// Get a [`Handle`] for this `SignalDelivery` instance.
     ///
-    /// See [`close`][#method.close].
-    pub fn is_closed(&self) -> bool {
-        self.waker.closed.load(Ordering::SeqCst)
-    }
-
-    /// Closes the instance.
-    ///
-    /// This is meant to signalize termination through all the interrelated instances ‒ the
-    /// ones created by cloning the same original [`SignalDelivery`] instance. After calling
-    /// close:
-    ///
-    /// * [`is_closed`][#method.is_closed] will return true.
-    /// * All currently blocking operations on all threads and all the instances are
-    ///   interrupted and terminate.
-    /// * Any further operations will not block.
-    /// * Further signals may or may not be returned from the iterators. However, if any are
-    ///   returned, these are real signals that happened.
-    ///
-    /// The goal is to be able to shut down any background thread that handles only the signals.
-    pub fn close(&self) {
-        self.waker.closed.store(true, Ordering::SeqCst);
-        self.waker.wake();
+    /// This can be used to add further signals or close the whole
+    /// signal delivery mechanism.
+    pub fn handle(&self) -> Handle {
+        self.handle.clone()
     }
 }
 
 /// The iterator of one batch of signals.
 ///
-/// This is returned by the [`pending`](struct.SignalDelivery.html#method.pending) method.
+/// This is returned by the [`pending`][SignalDelivery::pending] method.
 pub struct Pending {
     pending: Arc<[AtomicBool]>,
     position: usize,
@@ -342,19 +342,18 @@ pub enum PollResult {
 }
 
 /// An infinite iterator of received signals.
-pub struct SignalIterator<R, W> {
-    signals: SignalDelivery<R, W>,
+pub struct SignalIterator<R> {
+    signals: SignalDelivery<R>,
     iter: Pending,
 }
 
-impl<R, W> SignalIterator<R, W>
+impl<R> SignalIterator<R>
 where
     R: 'static + AsRawFd + Send + Sync,
-    W: 'static + AsRawFd + Send + Sync,
 {
     /// Create a new infinite iterator for signals registered with the passed
-    /// in [`SignalDelivery`](struct.SignalDelivery) instance.
-    pub fn new(signals: SignalDelivery<R, W>) -> Self {
+    /// in [`SignalDelivery`] instance.
+    pub fn new(mut signals: SignalDelivery<R>) -> Self {
         let iter = signals.pending();
         Self { signals, iter }
     }
@@ -362,25 +361,22 @@ where
     /// Return a signal if there is one or tell the caller that there is none at the moment.
     ///
     /// You have to pass in a callback which checks the underlying reading end of the pipe if
-    /// there may be any pending signals. This callback may or may not block. If there are
-    /// more signals the callback should return a [`Pending`](struct.Pending) instance wrapped
-    /// inside a [`Option::Some`]. If the callback returns [`Option::Some`] this method will
-    /// try to fetch the next signal from the [`Pending`] iterator and return it as
-    /// [`Poll::Ready`]. If the callback returns [`Option::None`] the method will return
-    /// [`Poll::Pending`] and assume it will be called again at a later point in time. The
-    /// callback may be called any number of times by this function.
+    /// there may be any pending signals. This callback may or may not block. If the callback
+    /// returns [`true`] this method will try to fetch the next signal and return it as a
+    /// [`PollResult::Signal`]. If the callback returns [`false`] the method will return
+    /// [`PollResult::Pending`] and assume it will be called again at a later point in time.
+    /// The callback may be called any number of times by this function.
+    ///
+    /// If the iterator was closed by the [`close`][Handle::close] method of the associtated
+    /// [`Handle`] this method will return [`PollResult::Closed`].
     pub fn poll_signal<F>(&mut self, has_signals: &mut F) -> PollResult
     where
-        F: FnMut(&R) -> Result<bool, Error>,
+        F: FnMut(&mut R) -> Result<bool, Error>,
     {
-        // The loop is necessary because there could be multiple Signal instances querying
-        // and resetting the same set of signal flags. So even if the has_more callback
-        // returned true it could be that the pending iterator doesn't return anything
-        // because an instance in another thread already consumed the signals in the
-        // meantime. It is also possible that the signal was already consumed by the
-        // previous pending iterator due to the asynchronous nature of signals and always
-        // moving to the end of the iterator before calling has_more.
-        while !self.signals.is_closed() {
+        // The loop is necessary because it is possible that a signal was already consumed
+        // by a previous pending iterator due to the asynchronous nature of signals and
+        // always moving to the end of the iterator before calling has_more.
+        while !self.signals.handle.is_closed() {
             if let Some(result) = self.iter.next() {
                 return PollResult::Signal(result);
             }
@@ -393,5 +389,19 @@ where
         }
 
         PollResult::Closed
+    }
+
+    /// Get a shareable [`Handle`] for this instance.
+    ///
+    /// This can be used to add further signals or terminate the whole
+    /// signal iteration using the [`close`][Handle::close] method.
+    pub fn handle(&self) -> Handle {
+        self.signals.handle()
+    }
+
+    /// Consume this iterator and return the inner
+    /// [`SignalDelivery`] instance.
+    pub fn into_inner(self) -> SignalDelivery<R> {
+        self.signals
     }
 }
