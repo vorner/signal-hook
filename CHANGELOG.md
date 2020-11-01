@@ -2,6 +2,10 @@
 
 * (Breaking) `pipe::register_raw` now takes ownership and tries to use send
   first, falls back to `O_NONBLOCK` and `write` on failure.
+* (Breaking) All async support is pulled out into separate crates, to decouple
+  from the async runtime release cycles on the main `signal-hook` crate.
+* Inner parts of the `Iterator` are now exposed in
+  `signal_hook::iterator::backend`, to support the async crates.
 
 # registry-1.2.2
 
