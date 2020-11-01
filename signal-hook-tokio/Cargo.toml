@@ -24,7 +24,7 @@ support-v0_1 = ["tokio-0_1", "futures-0_1"]
 
 [dependencies]
 libc = "~0.2"
-signal-hook = { version = "~0.1", path = ".." }
+signal-hook = { version = "~0.2", path = ".." }
 tokio-0_1 = { package = "tokio", version = "~0.1", optional = true}
 futures-0_1 = { package = "futures", version = "~0.1", optional = true}
 
