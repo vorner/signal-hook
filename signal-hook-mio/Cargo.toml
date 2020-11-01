@@ -34,3 +34,6 @@ mio-uds = { version = "~0.6", optional = true}
 mio-0_7 = { package = "mio", version = "~0.7", features = ["os-util", "os-poll", "uds"] }
 version-sync = "~0.8"
 serial_test = "~0.5"
+
+[package.metadata.docs.rs]
+all-features = true

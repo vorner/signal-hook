@@ -3,6 +3,8 @@
     test(attr(deny(warnings)))
 )]
 #![warn(missing_docs)]
+#![cfg_attr(docsrs, feature(doc_cfg))]
+
 //! A crate for integrating signal handling with the Tokio runtime.
 //!
 //! There are different sub modules for supporting different Tokio
