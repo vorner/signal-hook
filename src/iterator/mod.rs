@@ -48,6 +48,7 @@
 //! ```
 
 pub mod backend;
+pub mod exfiltrator;
 
 use std::borrow::Borrow;
 use std::io::{Error, ErrorKind, Read};
