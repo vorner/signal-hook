@@ -20,18 +20,19 @@ macro_rules! implement_signals_with_pipe {
         use std::io::Error;
 
         use signal_hook::iterator::backend::{self, SignalDelivery};
+        use signal_hook::iterator::exfiltrator::{Exfiltrator, SignalOnly};
 
         use $pipe as Pipe;
 
         use libc::c_int;
 
-        /// A struct which mimics [`signal_hook::iterator::Signals`]
+        /// A struct which mimics [`signal_hook::iterator::SignalsInfo`]
         /// but also allows usage together with MIO runtime.
-        pub struct Signals(SignalDelivery<Pipe>);
+        pub struct SignalsInfo<E: Exfiltrator = SignalOnly>(SignalDelivery<Pipe, E>);
 
         pub use backend::Pending;
 
-        impl Signals {
+        impl<E: Exfiltrator> SignalsInfo<E> {
             /// Create a `Signals` instance.
             ///
             /// This registers all the signals listed. The same restrictions (panics, errors) apply
@@ -40,9 +41,20 @@ macro_rules! implement_signals_with_pipe {
             where
                 I: IntoIterator<Item = S>,
                 S: Borrow<c_int>,
+                E: Default,
+            {
+                Self::with_exfiltrator(signals, E::default())
+            }
+
+            /// A constructor with specifying an exfiltrator to pass information out of the signal
+            /// handlers.
+            pub fn with_exfiltrator<I, S>(signals: I, exfiltrator: E) -> Result<Self, Error>
+            where
+                I: IntoIterator<Item = S>,
+                S: Borrow<c_int>,
             {
                 let (read, write) = Pipe::pair()?;
-                let delivery = SignalDelivery::with_pipe(read, write, signals)?;
+                let delivery = SignalDelivery::with_pipe(read, write, exfiltrator, signals)?;
                 Ok(Self(delivery))
             }
 
@@ -64,10 +76,16 @@ macro_rules! implement_signals_with_pipe {
             /// This method returns immediately (does not block) and may produce an empty iterator if there
             /// are no signals ready. So you should register an instance of this struct at an instance of
             /// [`mio::Poll`] to query for readability of the underlying self pipe.
-            pub fn pending(&mut self) -> Pending {
+            pub fn pending(&mut self) -> Pending<E> {
                 self.0.pending()
             }
         }
+
+        /// A simplified signal iterator.
+        ///
+        /// This is the [`SignalsInfo`], but returning only the signal numbers. This is likely the
+        /// one you want to use.
+        pub type Signals = SignalsInfo<SignalOnly>;
     };
 }
 

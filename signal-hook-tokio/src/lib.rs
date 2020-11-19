@@ -23,15 +23,16 @@ macro_rules! implement_signals_with_pipe {
 
         pub use signal_hook::iterator::backend::Handle;
         use signal_hook::iterator::backend::{SignalDelivery, SignalIterator};
+        use signal_hook::iterator::exfiltrator::{Exfiltrator, SignalOnly};
 
         /// An asynchronous [`Stream`] of arriving signals.
         ///
         /// The stream doesn't return the signals in the order they were recieved by
         /// the process and may merge signals received multiple times.
-        pub struct Signals(SignalIterator<$pipe>);
+        pub struct SignalsInfo<E: Exfiltrator = SignalOnly>(SignalIterator<$pipe, E>);
 
-        impl Signals {
-            /// Create a `Signals` instance.
+        impl<E: Exfiltrator> SignalsInfo<E> {
+            /// Create a `SignalsInfo` instance.
             ///
             /// This registers all the signals listed. The same restrictions (panics, errors) apply
             /// as with [`Handle::add_signal`].
@@ -39,9 +40,19 @@ macro_rules! implement_signals_with_pipe {
             where
                 I: IntoIterator<Item = S>,
                 S: Borrow<c_int>,
+                E: Default,
             {
-                let (read, write) = <$pipe>::pair()?;
-                let inner = SignalDelivery::with_pipe(read, write, signals)?;
+                Self::with_exfiltrator(signals, E::default())
+            }
+
+            /// A constructor with explicit exfiltrator.
+            pub fn with_exfiltrator<I, S>(signals: I, exfiltrator: E) -> Result<Self, Error>
+            where
+                I: IntoIterator<Item = S>,
+                S: Borrow<c_int>,
+            {
+                let (read, write) = UnixStream::pair()?;
+                let inner = SignalDelivery::with_pipe(read, write, exfiltrator, signals)?;
                 Ok(Self(SignalIterator::new(inner)))
             }
 
@@ -49,10 +60,16 @@ macro_rules! implement_signals_with_pipe {
             ///
             /// This can be used to add further signals or close the [`Signals`] instance
             /// which terminates the whole signal stream.
-            pub fn handle(&self) -> Handle {
+            pub fn handle(&self) -> Handle<E> {
                 self.0.handle()
             }
         }
+
+        /// Simplified version of the signals stream.
+        ///
+        /// This one simply returns the signal numbers, while [`SignalsInfo`] can provide additional
+        /// information.
+        pub type Signals = SignalsInfo<SignalOnly>;
     };
 }
 
@@ -104,17 +121,15 @@ macro_rules! implement_signals_with_pipe {
 /// ```
 #[cfg(feature = "support-v0_1")]
 pub mod v0_1 {
-    use signal_hook::iterator::backend::PollResult;
-
     use futures_0_1::stream::Stream;
     use futures_0_1::{Async, Poll};
-
+    use signal_hook::iterator::backend::PollResult;
     use tokio_0_1::io::AsyncRead;
     use tokio_0_1::net::unix::UnixStream;
 
     implement_signals_with_pipe!(UnixStream);
 
-    impl Signals {
+    impl<E: Exfiltrator> SignalsInfo<E> {
         /// Check if signals arrived by polling the stream for some bytes.
         ///
         /// Returns true if it was possible to read a byte and false otherwise.
@@ -127,11 +142,11 @@ pub mod v0_1 {
         }
     }
 
-    impl Stream for Signals {
-        type Item = libc::c_int;
+    impl<E: Exfiltrator> Stream for SignalsInfo<E> {
+        type Item = E::Output;
         type Error = Error;
-        fn poll(&mut self) -> Poll<Option<libc::c_int>, Self::Error> {
-            match self.0.poll_signal(&mut Signals::has_signals) {
+        fn poll(&mut self) -> Poll<Option<E::Output>, Self::Error> {
+            match self.0.poll_signal(&mut SignalsInfo::<E>::has_signals) {
                 PollResult::Pending => Poll::Ok(Async::NotReady),
                 PollResult::Signal(result) => Poll::Ok(Async::Ready(Some(result))),
                 PollResult::Closed => Poll::Ok(Async::Ready(None)),
@@ -200,13 +215,11 @@ pub mod v0_1 {
 pub mod v0_3 {
     use std::pin::Pin;
 
-    use signal_hook::iterator::backend::PollResult;
-
-    use tokio_0_3::io::{AsyncRead, ReadBuf};
-    use tokio_0_3::net::UnixStream;
-
     use futures_0_3::stream::Stream;
     use futures_0_3::task::{Context, Poll};
+    use signal_hook::iterator::backend::PollResult;
+    use tokio_0_3::io::{AsyncRead, ReadBuf};
+    use tokio_0_3::net::UnixStream;
 
     implement_signals_with_pipe!(UnixStream);
 

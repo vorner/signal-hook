@@ -65,6 +65,7 @@ use libc::c_int;
 
 pub use signal_hook::iterator::backend::Handle;
 use signal_hook::iterator::backend::{PollResult, SignalDelivery, SignalIterator};
+use signal_hook::iterator::exfiltrator::{Exfiltrator, SignalOnly};
 
 use async_std::os::unix::net::UnixStream;
 
@@ -76,9 +77,9 @@ use futures::AsyncRead;
 ///
 /// The stream doesn't return the signals in the order they were recieved by
 /// the process and may merge signals received multiple times.
-pub struct Signals(SignalIterator<UnixStream>);
+pub struct SignalsInfo<E: Exfiltrator = SignalOnly>(SignalIterator<UnixStream, E>);
 
-impl Signals {
+impl<E: Exfiltrator> SignalsInfo<E> {
     /// Create a `Signals` instance.
     ///
     /// This registers all the signals listed. The same restrictions (panics, errors) apply
@@ -87,9 +88,19 @@ impl Signals {
     where
         I: IntoIterator<Item = S>,
         S: Borrow<c_int>,
+        E: Default,
+    {
+        Self::with_exfiltrator(signals, E::default())
+    }
+
+    /// A constructor with explicit exfiltrator.
+    pub fn with_exfiltrator<I, S>(signals: I, exfiltrator: E) -> Result<Self, Error>
+    where
+        I: IntoIterator<Item = S>,
+        S: Borrow<c_int>,
     {
         let (read, write) = UnixStream::pair()?;
-        let inner = SignalDelivery::with_pipe(read, write, signals)?;
+        let inner = SignalDelivery::with_pipe(read, write, exfiltrator, signals)?;
         Ok(Self(SignalIterator::new(inner)))
     }
 
@@ -97,12 +108,12 @@ impl Signals {
     ///
     /// This can be used to add further signals or close the [`Signals`] instance
     /// which terminates the whole signal stream.
-    pub fn handle(&self) -> Handle {
+    pub fn handle(&self) -> Handle<E> {
         self.0.handle()
     }
 }
 
-impl Signals {
+impl SignalsInfo {
     fn has_signals(read: &mut UnixStream, ctx: &mut Context<'_>) -> Result<bool, Error> {
         match Pin::new(read).poll_read(ctx, &mut [0u8]) {
             Poll::Pending => Ok(false),
@@ -112,7 +123,7 @@ impl Signals {
     }
 }
 
-impl Stream for Signals {
+impl Stream for SignalsInfo {
     type Item = c_int;
 
     fn poll_next(mut self: Pin<&mut Self>, ctx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
@@ -124,3 +135,9 @@ impl Stream for Signals {
         }
     }
 }
+
+/// Simplified version of the signals stream.
+///
+/// This one simply returns the signal numbers, while [`SignalsInfo`] can provide additional
+/// information.
+pub type Signals = SignalsInfo<SignalOnly>;
