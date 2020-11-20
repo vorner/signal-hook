@@ -251,7 +251,7 @@ impl<E: Exfiltrator> SignalsInfo<E> {
     /// Get a shareable handle to a [`Handle`] for this instance.
     ///
     /// This can be used to add further signals or close the [`Signals`] instance.
-    pub fn handle(&self) -> Handle<E> {
+    pub fn handle(&self) -> Handle {
         self.0.handle()
     }
 }

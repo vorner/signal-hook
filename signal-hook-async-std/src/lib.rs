@@ -108,7 +108,7 @@ impl<E: Exfiltrator> SignalsInfo<E> {
     ///
     /// This can be used to add further signals or close the [`Signals`] instance
     /// which terminates the whole signal stream.
-    pub fn handle(&self) -> Handle<E> {
+    pub fn handle(&self) -> Handle {
         self.0.handle()
     }
 }

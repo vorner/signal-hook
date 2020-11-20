@@ -28,7 +28,7 @@ use std::sync::{Arc, Mutex};
 
 use libc::{self, c_int};
 
-use super::exfiltrator::{Exfiltrator, SignalOnly};
+use super::exfiltrator::Exfiltrator;
 use crate::pipe::{self, WakeMethod};
 use crate::SigId;
 
@@ -76,25 +76,8 @@ struct PendingSignals<E: Exfiltrator> {
     slots: [E::Storage; MAX_SIGNUM],
 }
 
-/// A struct to control an instance of an associated type
-/// (like for example [`Signals`][super::Signals]).
-///
-/// It allows to register more signal handlers and to shutdown the signal
-/// delivery. You can [`clone`][Handle::clone] this type which isn't a
-/// very expensive operation. The cloned instances can be shared between
-/// multiple threads.
-#[derive(Debug)]
-pub struct Handle<E: Exfiltrator = SignalOnly> {
-    pending: Arc<PendingSignals<E>>,
-    write: Arc<dyn SelfPipeWrite>,
-    delivery_state: Arc<DeliveryState>,
-}
-
-impl<E: Exfiltrator> Handle<E> {
-    fn new<W>(write: W, exfiltrator: E) -> Self
-    where
-        W: 'static + SelfPipeWrite,
-    {
+impl<E: Exfiltrator> PendingSignals<E> {
+    fn new(exfiltrator: E) -> Self {
         // Unfortunately, Default is not implemented for long arrays :-(
         //
         // Note that if the default impl panics, the already existing instances are leaked.
@@ -106,11 +89,71 @@ impl<E: Exfiltrator> Handle<E> {
             }
         }
 
-        let pending = Arc::new(PendingSignals {
+        Self {
             exfiltrator,
             slots: unsafe { slots.assume_init() },
-        });
+        }
+    }
+}
 
+/// An internal trait to hide adding new signals into a Handle behind a dynamic dispatch.
+trait AddSignal: Debug + Send + Sync {
+    fn add_signal(
+        self: Arc<Self>,
+        write: Arc<dyn SelfPipeWrite>,
+        signal: c_int,
+    ) -> Result<SigId, Error>;
+}
+
+impl<E: Exfiltrator> AddSignal for PendingSignals<E> {
+    fn add_signal(
+        self: Arc<Self>,
+        write: Arc<dyn SelfPipeWrite>,
+        signal: c_int,
+    ) -> Result<SigId, Error> {
+        assert!(signal >= 0);
+        assert!(
+            (signal as usize) < MAX_SIGNUM,
+            "Signal number {} too large. If your OS really supports such signal, file a bug",
+            signal,
+        );
+        assert!(
+            self.exfiltrator.supports_signal(signal),
+            "Signal {} not supported by exfiltrator {:?}",
+            signal,
+            self.exfiltrator,
+        );
+
+        let action = move |act: &_| {
+            let slot = &self.slots[signal as usize];
+            let ex = &self.exfiltrator;
+            ex.store(slot, signal, act);
+            write.wake_readers();
+        };
+        let id = unsafe { signal_hook_registry::register_sigaction(signal, action) }?;
+        Ok(id)
+    }
+}
+
+/// A struct to control an instance of an associated type
+/// (like for example [`Signals`][super::Signals]).
+///
+/// It allows to register more signal handlers and to shutdown the signal
+/// delivery. You can [`clone`][Handle::clone] this type which isn't a
+/// very expensive operation. The cloned instances can be shared between
+/// multiple threads.
+#[derive(Debug, Clone)]
+pub struct Handle {
+    pending: Arc<dyn AddSignal>,
+    write: Arc<dyn SelfPipeWrite>,
+    delivery_state: Arc<DeliveryState>,
+}
+
+impl Handle {
+    fn new<W>(write: W, pending: Arc<dyn AddSignal>) -> Self
+    where
+        W: 'static + SelfPipeWrite,
+    {
         Self {
             pending,
             write: Arc::new(write),
@@ -135,34 +178,16 @@ impl<E: Exfiltrator> Handle<E> {
     /// * If the relevant [`Exfiltrator`] does not support this particular signal. The default
     ///   [`SignalOnly`] one supports all signals.
     pub fn add_signal(&self, signal: c_int) -> Result<(), Error> {
-        assert!(signal >= 0);
-        assert!(
-            (signal as usize) < MAX_SIGNUM,
-            "Signal number {} too large. If your OS really supports such signal, file a bug",
-            signal,
-        );
-        assert!(
-            self.pending.exfiltrator.supports_signal(signal),
-            "Signal {} not supported by exfiltrator {:?}",
-            signal,
-            self.pending.exfiltrator,
-        );
         let mut lock = self.delivery_state.registered_signal_ids.lock().unwrap();
         // Already registered, ignoring
         if lock[signal as usize].is_some() {
             return Ok(());
         }
 
-        let pending = Arc::clone(&self.pending);
-        let write = Arc::clone(&self.write);
-        let action = move |act: &_| {
-            let slot = &pending.slots[signal as usize];
-            let ex = &pending.exfiltrator;
-            ex.store(slot, signal, act);
-            write.wake_readers();
-        };
-        let id = unsafe { signal_hook_registry::register_sigaction(signal, action) }?;
+        let id = Arc::clone(&self.pending).add_signal(Arc::clone(&self.write), signal)?;
+
         lock[signal as usize] = Some(id);
+
         Ok(())
     }
 
@@ -192,16 +217,6 @@ impl<E: Exfiltrator> Handle<E> {
     }
 }
 
-impl<E: Exfiltrator> Clone for Handle<E> {
-    fn clone(&self) -> Self {
-        Handle {
-            delivery_state: Arc::clone(&self.delivery_state),
-            pending: Arc::clone(&self.pending),
-            write: Arc::clone(&self.write),
-        }
-    }
-}
-
 /// A struct for delivering received signals to the main program flow.
 /// The self-pipe IO type is generic. See the
 /// [`with_pipe`][SignalDelivery::with_pipe] method for requirements
@@ -209,7 +224,8 @@ impl<E: Exfiltrator> Clone for Handle<E> {
 #[derive(Debug)]
 pub struct SignalDelivery<R, E: Exfiltrator> {
     read: R,
-    handle: Handle<E>,
+    handle: Handle,
+    pending: Arc<PendingSignals<E>>,
 }
 
 impl<R, E: Exfiltrator> SignalDelivery<R, E>
@@ -238,8 +254,14 @@ where
         S: Borrow<c_int>,
         W: 'static + AsRawFd + Debug + Send + Sync,
     {
-        let handle = Handle::new(write, exfiltrator);
-        let me = Self { read, handle };
+        let pending = Arc::new(PendingSignals::new(exfiltrator));
+        let pending_add_signal = Arc::clone(&pending);
+        let handle = Handle::new(write, pending_add_signal);
+        let me = Self {
+            read,
+            handle,
+            pending,
+        };
         for sig in signals {
             me.handle.add_signal(*sig.borrow())?;
         }
@@ -296,7 +318,7 @@ where
     /// there are no signals ready.
     pub fn pending(&mut self) -> Pending<E> {
         self.flush();
-        Pending::new(Arc::clone(&self.handle.pending))
+        Pending::new(Arc::clone(&self.pending))
     }
 
     /// Checks the reading end of the self pipe for available signals.
@@ -327,7 +349,7 @@ where
     ///
     /// This can be used to add further signals or close the whole
     /// signal delivery mechanism.
-    pub fn handle(&self) -> Handle<E> {
+    pub fn handle(&self) -> Handle {
         self.handle.clone()
     }
 }
@@ -434,7 +456,7 @@ where
     ///
     /// This can be used to add further signals or terminate the whole
     /// signal iteration using the [`close`][Handle::close] method.
-    pub fn handle(&self) -> Handle<E> {
+    pub fn handle(&self) -> Handle {
         self.signals.handle()
     }
 
