@@ -1,0 +1,163 @@
+name: test
+
+on:
+  push:
+  pull_request:
+
+env:
+  CARGO_TERM_COLOR: always
+  RUST_BACKTRACE: full
+
+jobs:
+  test:
+    name: Build & test
+    strategy:
+      fail-fast: false
+      matrix:
+        os:
+          - ubuntu-latest
+          - macos-latest
+          - windows-latest
+        rust:
+          - stable
+          - beta
+          - nightly
+          - 1.31.0
+        components:
+          - clippy
+
+        include:
+          - os: ubuntu-latest
+            rust: 1.26.0
+            components: ""
+          - os: macos-latest
+            rust: 1.26.0
+            components: ""
+          - os: windows-latest
+            rust: 1.26.0
+            components: ""
+
+    runs-on: ${{ matrix.os }}
+
+    steps:
+      - name: checkout
+        uses: actions/checkout@v2
+
+      - name: Install Rust
+        uses: actions-rs/toolchain@v1
+        with:
+          toolchain: ${{ matrix.rust }}
+          default: true
+          components: ${{ matrix.components }}
+
+      - name: Restore cache
+        uses: Swatinem/rust-cache@v1
+
+      - name: Build & test
+        env:
+          RUST_VERSION: ${{ matrix.rust }}
+          OS: ${{ matrix.os }}
+        run: ./ci-check.sh
+
+  rustfmt:
+    name: Check formatting
+    runs-on: ubuntu-latest
+    steps:
+      - name: checkout
+        uses: actions/checkout@v2
+
+      - name: Install Rust
+        uses: actions-rs/toolchain@v1
+        with:
+          toolchain: stable
+          default: true
+          components: rustfmt
+
+      - run: cargo fmt --all -- --check
+
+  links:
+    name: Check documentation links
+    runs-on: ubuntu-latest
+    steps:
+      - name: checkout
+        uses: actions/checkout@v2
+
+      - name: Install Rust
+        uses: actions-rs/toolchain@v1
+        with:
+          toolchain: stable
+          default: true
+
+      - name: Restore cache
+        uses: Swatinem/rust-cache@v1
+
+      - name: Check links
+        run:
+          for package in $(cargo metadata --no-deps --format-version=1 | jq -r '.packages[] | .name'); do
+            cargo rustdoc -p "$package" --all-features -- -D warnings;
+          done
+
+  coverage:
+    name: Coverage
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v2
+
+      - name: Install Rust
+        uses: actions-rs/toolchain@v1
+        with:
+          toolchain: nightly
+          default: true
+
+      - name: Restore cache
+        uses: Swatinem/rust-cache@v1
+
+      - name: Run tests
+        run: cargo test --all --all-features
+        env:
+          CARGO_INCREMENTAL: '0'
+          RUSTFLAGS: '-Zprofile -Ccodegen-units=1 -Cinline-threshold=0 -Clink-dead-code -Coverflow-checks=off -Cpanic=abort -Zpanic_abort_tests'
+          RUSTDOCFLAGS: '-Zprofile -Ccodegen-units=1 -Cinline-threshold=0 -Clink-dead-code -Coverflow-checks=off -Cpanic=abort -Zpanic_abort_tests'
+          CFLAGS: --coverage
+          CXXFLAGS: --coverage
+
+      - name: Generate coverage
+        uses: actions-rs/grcov@v0.1
+
+      - name: Upload to codecov.io
+        uses: codecov/codecov-action@v1
+        with:
+          token: ${{secrets.CODECOV_TOKEN}}
+
+# Disabled, tarpaulin doesn't like signals, not working even with --forward :-(
+#  coverage:
+#    name: Coverage
+#    runs-on: ubuntu-latest
+#    steps:
+#      - name: Checkout repository
+#        uses: actions/checkout@v2
+#
+#      - name: Install Rust
+#        uses: actions-rs/toolchain@v1
+#        with:
+#          toolchain: stable
+#          default: true
+#
+#      - name: Run cargo-tarpaulin
+#        uses: actions-rs/tarpaulin@v0.1
+#        with:
+#          args: '--all --all-features --forward'
+#          timeout: 120
+#
+#      - name: Upload to codecov.io
+#        uses: codecov/codecov-action@v1
+#        with:
+#          token: ${{secrets.CODECOV_TOKEN}}
+#
+#      - name: Archive code coverage results
+#        uses: actions/upload-artifact@v2
+#        with:
+#          name: code-coverage-report
+#          path: cobertura.xml
+#          retention-days: 30

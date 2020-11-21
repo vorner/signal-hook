@@ -1,7 +1,4 @@
-#![doc(
-    html_root_url = "https://docs.rs/signal-hook-registry/1.2.2/signal-hook-registry/",
-    test(attr(deny(warnings)))
-)]
+#![doc(test(attr(deny(warnings))))]
 #![warn(missing_docs)]
 #![allow(unknown_lints, renamed_and_remove_lints, bare_trait_objects)]
 
@@ -152,10 +149,7 @@ impl Slot {
             return Err(Error::last_os_error());
         }
         Ok(Slot {
-            prev: Prev {
-                signal,
-                info: old,
-            },
+            prev: Prev { signal, info: old },
             actions: BTreeMap::new(),
         })
     }
@@ -181,10 +175,7 @@ impl Slot {
             return Err(Error::last_os_error());
         }
         Ok(Slot {
-            prev: Prev {
-                signal,
-                info: old,
-            },
+            prev: Prev { signal, info: old },
             actions: BTreeMap::new(),
         })
     }
@@ -212,10 +203,7 @@ impl Prev {
         if old == SIG_ERR {
             return Err(Error::last_os_error());
         }
-        Ok(Prev {
-            signal,
-            info: old,
-        })
+        Ok(Prev { signal, info: old })
     }
 
     #[cfg(not(windows))]
@@ -227,10 +215,7 @@ impl Prev {
             return Err(Error::last_os_error());
         }
 
-        Ok(Prev {
-            signal,
-            info: old,
-        })
+        Ok(Prev { signal, info: old })
     }
 
     #[cfg(windows)]
@@ -609,7 +594,10 @@ where
             // And yes, this still leaves a short race condition when some other thread could
             // replace the signal handler and we would be calling the outdated one for a short
             // time, until we install the slot.
-            globals.race_fallback.write().store(Some(Prev::detect(signal)?));
+            globals
+                .race_fallback
+                .write()
+                .store(Some(Prev::detect(signal)?));
 
             let mut slot = Slot::new(signal)?;
             slot.actions.insert(id, action);

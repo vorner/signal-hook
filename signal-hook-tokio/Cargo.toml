@@ -29,7 +29,6 @@ tokio-0_1 = { package = "tokio", version = "~0.1", optional = true}
 futures-0_1 = { package = "futures", version = "~0.1", optional = true}
 
 [dev-dependencies]
-version-sync = "~0.8"
 serial_test = "~0.5"
 
 [package.metadata.docs.rs]

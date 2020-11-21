@@ -14,7 +14,6 @@ license = "Apache-2.0/MIT"
 edition = "2018"
 
 [badges]
-travis-ci = { repository = "vorner/signal-hook" }
 maintenance = { status = "actively-developed" }
 
 [workspace]
@@ -30,9 +29,7 @@ libc = "~0.2"
 signal-hook-registry = { version = "~1.2", path = "signal-hook-registry" }
 
 [dev-dependencies]
-version-sync = "~0.8"
 serial_test = "~0.5"
-
 
 [package.metadata.docs.rs]
 all-features = true

@@ -1,7 +1,4 @@
-#![doc(
-    html_root_url = "https://docs.rs/signal-hook-mio/0.1.0/",
-    test(attr(deny(warnings)))
-)]
+#![doc(test(attr(deny(warnings))))]
 #![warn(missing_docs)]
 #![cfg_attr(docsrs, feature(doc_cfg))]
 

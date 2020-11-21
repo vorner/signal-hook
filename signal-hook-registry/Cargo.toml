@@ -21,5 +21,4 @@ maintenance = { status = "actively-developed" }
 libc = "~0.2"
 
 [dev-dependencies]
-version-sync = "~0.8"
 signal-hook = { version = "~0.2", path = ".." }

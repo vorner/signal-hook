@@ -7,11 +7,7 @@
 
 set -ex
 
-export PATH="$PATH":~/.cargo/bin
-export RUST_BACKTRACE=1
-export CARGO_INCREMENTAL=1
-
-if [ "$TRAVIS_RUST_VERSION" = 1.26.0 ] ; then
+if [ "$RUST_VERSION" = 1.26.0 ] ; then
 	rm Cargo.toml
 	cd signal-hook-registry
 	sed -i -e '/signal-hook =/d' Cargo.toml
@@ -22,11 +18,11 @@ fi
 rm -f Cargo.lock
 cargo build --all
 
-if [ "$TRAVIS_RUST_VERSION" = 1.31.0 ] ; then
+if [ "$RUST_VERSION" = 1.31.0 ] ; then
 	exit
 fi
 
-if [ "$TRAVIS_OS_NAME" = "windows" ] ; then
+if [ "$OS" = "windows-latest" ] ; then
 	# The async support crates rely on the iterator module
 	# which isn't available for windows. So exclude them
 	# from the build.
@@ -43,9 +39,8 @@ cargo test --all $EXCLUDE_FROM_BUILD
 cargo doc --no-deps
 
 # Sometimes nightly doesn't have clippy or rustfmt, so don't try that there.
-if [ "$TRAVIS_RUST_VERSION" = nightly ] ; then
+if [ "$RUST_VERSION" = nightly ] ; then
 	exit
 fi
 
 cargo clippy --all $EXCLUDE_FROM_BUILD --tests -- --deny clippy::all
-cargo fmt
