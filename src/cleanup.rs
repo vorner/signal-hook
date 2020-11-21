@@ -127,14 +127,13 @@ pub fn cleanup_signal(signal: c_int) -> Result<(), Error> {
 fn verify_signals_exist(signals: &[c_int]) -> Result<(), Error> {
     signals
         .iter()
-        .map(|s| -> Result<(), Error> {
+        .try_for_each(|s| {
             if unsafe { ::libc::sigaction(*s, ptr::null(), ptr::null_mut()) } == -1 {
                 Err(Error::last_os_error())
             } else {
                 Ok(())
             }
         })
-        .collect()
 }
 
 #[cfg(windows)]
