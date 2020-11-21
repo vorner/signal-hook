@@ -1,7 +1,4 @@
-#![doc(
-    html_root_url = "https://docs.rs/signal-hook-registry/1.2.2/signal-hook-registry/",
-    test(attr(deny(warnings)))
-)]
+#![doc(test(attr(deny(warnings))))]
 #![warn(missing_docs)]
 #![allow(unknown_lints, renamed_and_remove_lints, bare_trait_objects)]
 
