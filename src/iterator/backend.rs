@@ -18,7 +18,7 @@
 //! contained in the adapter libraries instead.
 
 use std::borrow::Borrow;
-use std::fmt::Debug;
+use std::fmt::{Debug, Formatter, Result as FmtResult};
 use std::io::Error;
 use std::mem::MaybeUninit;
 use std::os::unix::io::AsRawFd;
@@ -70,7 +70,6 @@ impl Drop for DeliveryState {
     }
 }
 
-#[derive(Debug)]
 struct PendingSignals<E: Exfiltrator> {
     exfiltrator: E,
     slots: [E::Storage; MAX_SIGNUM],
@@ -84,7 +83,8 @@ impl<E: Exfiltrator> PendingSignals<E> {
         let mut slots = MaybeUninit::<[E::Storage; MAX_SIGNUM]>::uninit();
         for i in 0..MAX_SIGNUM {
             unsafe {
-                let slot = slots.as_mut_ptr().cast::<E::Storage>().add(i);
+                let slot: *mut E::Storage = slots.as_mut_ptr() as *mut _;
+                let slot = slot.add(i);
                 ptr::write(slot, E::Storage::default());
             }
         }
@@ -103,6 +103,17 @@ trait AddSignal: Debug + Send + Sync {
         write: Arc<dyn SelfPipeWrite>,
         signal: c_int,
     ) -> Result<SigId, Error>;
+}
+
+// Implemented manually because 1.36.0 doesn't yet support Debug for [X; BIG_NUMBER].
+impl<E: Exfiltrator> Debug for PendingSignals<E> {
+    fn fmt(&self, fmt: &mut Formatter) -> FmtResult {
+        fmt.debug_struct("PendingSignals")
+            .field("exfiltrator", &self.exfiltrator)
+            // While the array does not, the slice does implement Debug
+            .field("slots", &&self.slots[..])
+            .finish()
+    }
 }
 
 impl<E: Exfiltrator> AddSignal for PendingSignals<E> {
