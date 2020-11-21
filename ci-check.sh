@@ -18,7 +18,7 @@ fi
 rm -f Cargo.lock
 cargo build --all --exclude signal-hook-async-std
 
-if [ "$RUST_VERSION" = 1.31.0 ] ; then
+if [ "$RUST_VERSION" = 1.36.0 ] ; then
 	exit
 fi
 
