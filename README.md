@@ -2,6 +2,7 @@
 
 [![Actions Status](https://github.com/vorner/signal-hook/workflows/test/badge.svg)](https://github.com/vorner/signal-hook/actions)
 [![codecov](https://codecov.io/gh/vorner/signal-hook/branch/master/graph/badge.svg?token=3KA3R2D9fV)](https://codecov.io/gh/vorner/signal-hook)
+[![docs](https://docs.rs/signal-hook/badge.svg)](https://docs.rs/signal-hook)
 
 Library for safe and correct Unix signal handling in Rust.
 
