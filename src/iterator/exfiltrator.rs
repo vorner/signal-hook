@@ -20,11 +20,66 @@ mod sealed {
 
     use libc::{c_int, siginfo_t};
 
+    /// The actual implementation of the [`Exfiltrator`][super::Exfiltrator].
+    ///
+    /// For now, this is hidden from the public API, but the intention is to move it to a public
+    /// place so users can implement it eventually, once we verify that it works well.
+    ///
+    /// The trait is unsafe as the [`Exfiltrator::store`] is called inside the signal handler and
+    /// must be async-signal-safe. Implementing this correctly may be difficult, therefore care
+    /// needs to be taken. One method known to work is encoding the data into an atomic variable.
+    /// Other, less limiting approaches, will be eventually explored.
     pub unsafe trait Exfiltrator: Debug + Send + Sync + 'static {
+        /// One slot for storing the data.
+        ///
+        /// Each signal will get its one slot of this type, independent of other signals. It can
+        /// store the information in there inside the signal handler and will be loaded from it in
+        /// load.
+        ///
+        /// Each slot is initialized to the [`Default`] value. It is expected this value represents
+        /// „no signal delivered“ state.
         type Storage: Debug + Default + Send + Sync + 'static;
+
+        /// The type returned to the user.
         type Output;
+
+        /// If the given signal is supported by this specific exfiltrator.
+        ///
+        /// Not all information is available to all signals, therefore not all exfiltrators must
+        /// support all signals. If `false` is returned, the user is prevented for registering such
+        /// signal number with the given exfiltrator.
         fn supports_signal(&self, sig: c_int) -> bool;
+
+        /// Puts the signal information inside the slot.
+        ///
+        /// It needs to somehow store the relevant information and the fact that a signal happened.
+        ///
+        /// # Warning
+        ///
+        /// This will be called inside the signal handler. It needs to be async-signal-safe. In
+        /// particular, very small amount of operations are allowed in there. This namely does
+        /// *not* include any locking nor allocation.
+        ///
+        /// It is also possible that multiple store methods are called concurrently; it is up to
+        /// the implementor to deal with that.
         fn store(&self, slot: &Self::Storage, signal: c_int, info: &siginfo_t);
+
+        /// Loads the signal information from the given slot.
+        ///
+        /// The method shall check if the signal happened (it may be possible to be called without
+        /// the signal previously being delivered; it is up to the implementer to recognize it). It
+        /// is assumed the [`Default`] value is recognized as no signal delivered.
+        ///
+        /// If it was delivered, the method shall extract the relevant information *and reset the
+        /// slot* to the no signal delivered state.
+        ///
+        /// It shall return `Some(value)` if the signal was successfully received and `None` in
+        /// case no signal was delivered.
+        ///
+        /// No blocking shall happen inside this method. It may be called concurrently with
+        /// [`store`][Exfiltrator::store] (due to how signals work, concurrently even inside the
+        /// same thread ‒ a `store` may „interrupt“ a call to `load`). It is up to the implementer
+        /// to deal with that.
         fn load(&self, slot: &Self::Storage, signal: c_int) -> Option<Self::Output>;
     }
 }
