@@ -1,4 +1,4 @@
-# Unreleased
+# 0.2.0
 
 * Bump minimal rustc version to 1.36.0 (signal-hook-registry still builds with
   1.26.0).
