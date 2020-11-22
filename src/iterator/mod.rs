@@ -1,8 +1,12 @@
 //! An iterator over incoming signals.
 //!
 //! This provides a higher abstraction over the signals, providing
-//! the [`Signals`] structure which is able to iterate over the
-//! incoming signals.
+//! the [`SignalsInfo`] structure which is able to iterate over the
+//! incoming signals. The structure is parametrized by an
+//! [`Exfiltrator`][self::exfiltrator::Exfiltrator], which specifies what information is returned
+//! for each delivered signal.
+//!
+//! The [`Signals`] is a type alias for the common case when it is enough to get the signal number.
 //!
 //! # Examples
 //!
@@ -75,7 +79,7 @@ use self::exfiltrator::{Exfiltrator, SignalOnly};
 /// application this can be used to dedicate a separate thread for signal handling. In this case
 /// you should get a [`Handle`] using the [`handle`][Signals::handle] method before sending the
 /// `Signals` instance to a background thread. With the handle you will be able to shut down the
-/// background thread later.
+/// background thread later, or to operatively add more signals.
 ///
 /// The controller handle can be shared between as many threads as you like using its
 /// [`clone`][Handle::clone] method.
@@ -93,7 +97,7 @@ use self::exfiltrator::{Exfiltrator, SignalOnly};
 /// # fn main() -> Result<(), Error> {
 /// let signals = Signals::new(&[signal_hook::SIGUSR1, signal_hook::SIGUSR2])?;
 /// let handle = signals.handle();
-/// thread::spawn(move || {
+/// let thread = thread::spawn(move || {
 ///     for signal in signals {
 ///         match signal {
 ///             signal_hook::SIGUSR1 => {},
@@ -102,7 +106,10 @@ use self::exfiltrator::{Exfiltrator, SignalOnly};
 ///         }
 ///     }
 /// });
+///
+/// // Some time later...
 /// handle.close();
+/// thread.join().unwrap();
 /// # Ok(())
 /// # }
 /// ```
@@ -149,7 +156,7 @@ impl<E: Exfiltrator> SignalsInfo<E> {
     ///
     /// This returns an iterator over all the signal numbers of the signals received since last
     /// time they were read (out of the set registered by this `Signals` instance). Note that they
-    /// are returned in arbitrary order and a signal number is returned only once even if it was
+    /// are returned in arbitrary order and a signal instance may returned only once even if it was
     /// received multiple times.
     ///
     /// This method returns immediately (does not block) and may produce an empty iterator if there

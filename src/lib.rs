@@ -23,6 +23,21 @@
 //!   limited to very few of them. To highlight, mutexes (or other locking mechanisms) and memory
 //!   allocation and deallocation is *not* allowed.
 //!
+//! # The easy way
+//!
+//! If you are interested in the easiest way to handle signals, head over to the
+//! [`Signals`][crate::iterator] iterator. It is one of the abstractions provided by this library
+//! and probably the easiest one to use and with the least amount of catches.
+//!
+//! Note that they still are some catches, most importantly that both the OS and the library may
+//! collate multiple instances of the same signal into one (if you're not consuming fast enough).
+//!
+//! If you want an asynchronous version, see below for extension crates giving you that support.
+//!
+//! Otherwise, read on for the full details.
+//!
+//! # Details
+//!
 //! This library aims to solve some of the problems. It provides a global registry of actions
 //! performed on arrival of signals. It is possible to register multiple actions for the same
 //! signal and it is possible to remove the actions later on. If there was a previous signal
@@ -70,7 +85,8 @@
 //! `SIGFPE`, `SIGILL`). Therefore, this library will panic if any attempt at manipulating these is
 //! made. There are some use cases for redefining the latter ones, but these are not well served by
 //! this library and you really *really* have to know what you're doing and are generally on your
-//! own doing that.
+//! own doing that. You can, however, have a look at the very low level API in
+//! [`signal_hook_registry`].
 //!
 //! # Signal masks
 //!
@@ -148,6 +164,7 @@
 //! If you are looking for integration with an asynchronous runtime take a look at one of the
 //! following adapter crates:
 //!
+//! * [`signal-hook-async-std`](https://docs.rs/signal-hook-async-std) for async-std support
 //! * [`signal-hook-mio`](https://docs.rs/signal-hook-mio) for MIO support
 //! * [`signal-hook-tokio`](https://docs.rs/signal-hook-tokio) for Tokio support
 //!
