@@ -48,8 +48,10 @@
 //! ```
 
 pub mod backend;
+pub mod exfiltrator;
 
 use std::borrow::Borrow;
+use std::fmt::{Debug, Formatter, Result as FmtResult};
 use std::io::{Error, ErrorKind, Read};
 use std::os::unix::net::UnixStream;
 
@@ -57,12 +59,15 @@ use libc::{self, c_int};
 
 pub use self::backend::{Handle, Pending};
 use self::backend::{PollResult, SignalDelivery, SignalIterator};
+use self::exfiltrator::{Exfiltrator, SignalOnly};
 
 /// The main structure of the module, representing interest in some signals.
 ///
 /// Unlike the helpers in other modules, this registers the signals when created and unregisters
 /// them on drop. It provides the pending signals during its lifetime, either in batches or as an
 /// infinite iterator.
+///
+/// Most users will want to use it through the [`Signals`] type alias for simplicity.
 ///
 /// # Multiple threads
 ///
@@ -101,10 +106,9 @@ use self::backend::{PollResult, SignalDelivery, SignalIterator};
 /// # Ok(())
 /// # }
 /// ```
-#[derive(Debug)]
-pub struct Signals(SignalDelivery<UnixStream>);
+pub struct SignalsInfo<E: Exfiltrator = SignalOnly>(SignalDelivery<UnixStream, E>);
 
-impl Signals {
+impl<E: Exfiltrator> SignalsInfo<E> {
     /// Creates the `Signals` structure.
     ///
     /// This registers all the signals listed. The same restrictions (panics, errors) apply as
@@ -113,9 +117,24 @@ impl Signals {
     where
         I: IntoIterator<Item = S>,
         S: Borrow<c_int>,
+        E: Default,
+    {
+        Self::with_exfiltrator(signals, E::default())
+    }
+
+    /// An advanced constructor with explicit [`Exfiltrator`].
+    pub fn with_exfiltrator<I, S>(signals: I, exfiltrator: E) -> Result<Self, Error>
+    where
+        I: IntoIterator<Item = S>,
+        S: Borrow<c_int>,
     {
         let (read, write) = UnixStream::pair()?;
-        Ok(Signals(SignalDelivery::with_pipe(read, write, signals)?))
+        Ok(SignalsInfo(SignalDelivery::with_pipe(
+            read,
+            write,
+            exfiltrator,
+            signals,
+        )?))
     }
 
     /// Registers another signal to the set watched by this [`Signals`] instance.
@@ -135,7 +154,7 @@ impl Signals {
     ///
     /// This method returns immediately (does not block) and may produce an empty iterator if there
     /// are no signals ready.
-    pub fn pending(&mut self) -> Pending {
+    pub fn pending(&mut self) -> Pending<E> {
         self.0.pending()
     }
 
@@ -167,7 +186,7 @@ impl Signals {
     /// another thread this method will return immediately.
     ///
     /// Note that the blocking is done in this method, not in the iterator.
-    pub fn wait(&mut self) -> Pending {
+    pub fn wait(&mut self) -> Pending<E> {
         match self.0.poll_pending(&mut Self::has_signals) {
             Ok(Some(pending)) => pending,
             // Because of the blocking has_signals method the poll_pending method
@@ -225,7 +244,7 @@ impl Signals {
     /// # Ok(())
     /// # }
     /// ```
-    pub fn forever(self) -> Forever {
+    pub fn forever(self) -> Forever<E> {
         Forever(SignalIterator::new(self.0))
     }
 
@@ -237,30 +256,40 @@ impl Signals {
     }
 }
 
-impl IntoIterator for Signals {
-    type Item = c_int;
-    type IntoIter = Forever;
+impl<E> Debug for SignalsInfo<E>
+where
+    E: Debug + Exfiltrator,
+    E::Storage: Debug,
+{
+    fn fmt(&self, fmt: &mut Formatter) -> FmtResult {
+        fmt.debug_tuple("Signals").field(&self.0).finish()
+    }
+}
+
+impl<E: Exfiltrator> IntoIterator for SignalsInfo<E> {
+    type Item = E::Output;
+    type IntoIter = Forever<E>;
     fn into_iter(self) -> Self::IntoIter {
         self.forever()
     }
 }
 
 /// An infinit iterator of arriving signals.
-pub struct Forever(SignalIterator<UnixStream>);
+pub struct Forever<E: Exfiltrator>(SignalIterator<UnixStream, E>);
 
-impl Forever {
+impl<E: Exfiltrator> Forever<E> {
     /// Consume this iterator and return the inner
     /// [`Signals`] instance.
-    pub fn into_inner(self) -> Signals {
-        Signals(self.0.into_inner())
+    pub fn into_inner(self) -> SignalsInfo<E> {
+        SignalsInfo(self.0.into_inner())
     }
 }
 
-impl Iterator for Forever {
-    type Item = c_int;
+impl<E: Exfiltrator> Iterator for Forever<E> {
+    type Item = E::Output;
 
-    fn next(&mut self) -> Option<c_int> {
-        match self.0.poll_signal(&mut Signals::has_signals) {
+    fn next(&mut self) -> Option<E::Output> {
+        match self.0.poll_signal(&mut SignalsInfo::<E>::has_signals) {
             PollResult::Signal(result) => Some(result),
             PollResult::Closed => None,
             PollResult::Pending => unreachable!(
@@ -273,3 +302,9 @@ impl Iterator for Forever {
         }
     }
 }
+
+/// A type alias for an iterator returning just the signal numbers.
+///
+/// This is the simplified version for most of the use cases. For advanced usages, the
+/// [`SignalsInfo`] with explicit [`Exfiltrator`] type can be used.
+pub type Signals = SignalsInfo<SignalOnly>;

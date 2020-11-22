@@ -18,14 +18,17 @@
 //! contained in the adapter libraries instead.
 
 use std::borrow::Borrow;
-use std::fmt::Debug;
+use std::fmt::{Debug, Formatter, Result as FmtResult};
 use std::io::Error;
+use std::mem::MaybeUninit;
 use std::os::unix::io::AsRawFd;
+use std::ptr;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
 
 use libc::{self, c_int};
 
+use super::exfiltrator::Exfiltrator;
 use crate::pipe::{self, WakeMethod};
 use crate::SigId;
 
@@ -67,6 +70,82 @@ impl Drop for DeliveryState {
     }
 }
 
+struct PendingSignals<E: Exfiltrator> {
+    exfiltrator: E,
+    slots: [E::Storage; MAX_SIGNUM],
+}
+
+impl<E: Exfiltrator> PendingSignals<E> {
+    fn new(exfiltrator: E) -> Self {
+        // Unfortunately, Default is not implemented for long arrays :-(
+        //
+        // Note that if the default impl panics, the already existing instances are leaked.
+        let mut slots = MaybeUninit::<[E::Storage; MAX_SIGNUM]>::uninit();
+        for i in 0..MAX_SIGNUM {
+            unsafe {
+                let slot: *mut E::Storage = slots.as_mut_ptr() as *mut _;
+                let slot = slot.add(i);
+                ptr::write(slot, E::Storage::default());
+            }
+        }
+
+        Self {
+            exfiltrator,
+            slots: unsafe { slots.assume_init() },
+        }
+    }
+}
+
+/// An internal trait to hide adding new signals into a Handle behind a dynamic dispatch.
+trait AddSignal: Debug + Send + Sync {
+    fn add_signal(
+        self: Arc<Self>,
+        write: Arc<dyn SelfPipeWrite>,
+        signal: c_int,
+    ) -> Result<SigId, Error>;
+}
+
+// Implemented manually because 1.36.0 doesn't yet support Debug for [X; BIG_NUMBER].
+impl<E: Exfiltrator> Debug for PendingSignals<E> {
+    fn fmt(&self, fmt: &mut Formatter) -> FmtResult {
+        fmt.debug_struct("PendingSignals")
+            .field("exfiltrator", &self.exfiltrator)
+            // While the array does not, the slice does implement Debug
+            .field("slots", &&self.slots[..])
+            .finish()
+    }
+}
+
+impl<E: Exfiltrator> AddSignal for PendingSignals<E> {
+    fn add_signal(
+        self: Arc<Self>,
+        write: Arc<dyn SelfPipeWrite>,
+        signal: c_int,
+    ) -> Result<SigId, Error> {
+        assert!(signal >= 0);
+        assert!(
+            (signal as usize) < MAX_SIGNUM,
+            "Signal number {} too large. If your OS really supports such signal, file a bug",
+            signal,
+        );
+        assert!(
+            self.exfiltrator.supports_signal(signal),
+            "Signal {} not supported by exfiltrator {:?}",
+            signal,
+            self.exfiltrator,
+        );
+
+        let action = move |act: &_| {
+            let slot = &self.slots[signal as usize];
+            let ex = &self.exfiltrator;
+            ex.store(slot, signal, act);
+            write.wake_readers();
+        };
+        let id = unsafe { signal_hook_registry::register_sigaction(signal, action) }?;
+        Ok(id)
+    }
+}
+
 /// A struct to control an instance of an associated type
 /// (like for example [`Signals`][super::Signals]).
 ///
@@ -76,21 +155,16 @@ impl Drop for DeliveryState {
 /// multiple threads.
 #[derive(Debug, Clone)]
 pub struct Handle {
-    pending: Arc<[AtomicBool]>,
+    pending: Arc<dyn AddSignal>,
     write: Arc<dyn SelfPipeWrite>,
     delivery_state: Arc<DeliveryState>,
 }
 
 impl Handle {
-    fn new<W>(write: W) -> Self
+    fn new<W>(write: W, pending: Arc<dyn AddSignal>) -> Self
     where
         W: 'static + SelfPipeWrite,
     {
-        let pending: Arc<[AtomicBool]> = (0..MAX_SIGNUM)
-            .map(|_| AtomicBool::new(false))
-            .collect::<Vec<AtomicBool>>()
-            .into();
-
         Self {
             pending,
             write: Arc::new(write),
@@ -112,27 +186,19 @@ impl Handle {
     /// * If the given signal is [forbidden][crate::FORBIDDEN].
     /// * If the signal number is negative or larger than internal limit. The limit should be
     ///   larger than any supported signal the OS supports.
+    /// * If the relevant [`Exfiltrator`] does not support this particular signal. The default
+    ///   [`SignalOnly`] one supports all signals.
     pub fn add_signal(&self, signal: c_int) -> Result<(), Error> {
-        assert!(signal >= 0);
-        assert!(
-            (signal as usize) < MAX_SIGNUM,
-            "Signal number {} too large. If your OS really supports such signal, file a bug",
-            signal,
-        );
         let mut lock = self.delivery_state.registered_signal_ids.lock().unwrap();
         // Already registered, ignoring
         if lock[signal as usize].is_some() {
             return Ok(());
         }
 
-        let pending = Arc::clone(&self.pending);
-        let write = Arc::clone(&self.write);
-        let action = move || {
-            pending[signal as usize].store(true, Ordering::SeqCst);
-            write.wake_readers();
-        };
-        let id = unsafe { crate::register(signal, action) }?;
+        let id = Arc::clone(&self.pending).add_signal(Arc::clone(&self.write), signal)?;
+
         lock[signal as usize] = Some(id);
+
         Ok(())
     }
 
@@ -167,12 +233,13 @@ impl Handle {
 /// [`with_pipe`][SignalDelivery::with_pipe] method for requirements
 /// for the IO type.
 #[derive(Debug)]
-pub struct SignalDelivery<R> {
+pub struct SignalDelivery<R, E: Exfiltrator> {
     read: R,
     handle: Handle,
+    pending: Arc<PendingSignals<E>>,
 }
 
-impl<R> SignalDelivery<R>
+impl<R, E: Exfiltrator> SignalDelivery<R, E>
 where
     R: 'static + AsRawFd + Send + Sync,
 {
@@ -192,14 +259,20 @@ where
     ///   reading bytes from the read end
     ///
     /// So UnixStream is a good choice for this.
-    pub fn with_pipe<I, S, W>(read: R, write: W, signals: I) -> Result<Self, Error>
+    pub fn with_pipe<I, S, W>(read: R, write: W, exfiltrator: E, signals: I) -> Result<Self, Error>
     where
         I: IntoIterator<Item = S>,
         S: Borrow<c_int>,
         W: 'static + AsRawFd + Debug + Send + Sync,
     {
-        let handle = Handle::new(write);
-        let me = Self { read, handle };
+        let pending = Arc::new(PendingSignals::new(exfiltrator));
+        let pending_add_signal = Arc::clone(&pending);
+        let handle = Handle::new(write, pending_add_signal);
+        let me = Self {
+            read,
+            handle,
+            pending,
+        };
         for sig in signals {
             me.handle.add_signal(*sig.borrow())?;
         }
@@ -254,9 +327,9 @@ where
     ///
     /// This method returns immediately (does not block) and may produce an empty iterator if
     /// there are no signals ready.
-    pub fn pending(&mut self) -> Pending {
+    pub fn pending(&mut self) -> Pending<E> {
         self.flush();
-        Pending::new(Arc::clone(&self.handle.pending))
+        Pending::new(Arc::clone(&self.pending))
     }
 
     /// Checks the reading end of the self pipe for available signals.
@@ -268,7 +341,7 @@ where
     ///
     /// This method doesn't check the reading end by itself but uses the passed in callback.
     /// This method blocks if and only if the callback blocks trying to read some bytes.
-    pub fn poll_pending<F>(&mut self, has_signals: &mut F) -> Result<Option<Pending>, Error>
+    pub fn poll_pending<F>(&mut self, has_signals: &mut F) -> Result<Option<Pending<E>>, Error>
     where
         F: FnMut(&mut R) -> Result<bool, Error>,
     {
@@ -295,13 +368,14 @@ where
 /// The iterator of one batch of signals.
 ///
 /// This is returned by the [`pending`][SignalDelivery::pending] method.
-pub struct Pending {
-    pending: Arc<[AtomicBool]>,
+#[derive(Debug)]
+pub struct Pending<E: Exfiltrator> {
+    pending: Arc<PendingSignals<E>>,
     position: usize,
 }
 
-impl Pending {
-    fn new(pending: Arc<[AtomicBool]>) -> Self {
+impl<E: Exfiltrator> Pending<E> {
+    fn new(pending: Arc<PendingSignals<E>>) -> Self {
         Self {
             pending,
             position: 0,
@@ -309,19 +383,17 @@ impl Pending {
     }
 }
 
-impl Iterator for Pending {
-    type Item = c_int;
+impl<E: Exfiltrator> Iterator for Pending<E> {
+    type Item = E::Output;
 
-    fn next(&mut self) -> Option<c_int> {
-        while self.position < self.pending.len() {
+    fn next(&mut self) -> Option<E::Output> {
+        while self.position < self.pending.slots.len() {
             let sig = self.position;
-            let flag = &self.pending[sig];
+            let slot = &self.pending.slots[sig];
             self.position += 1;
-            if flag
-                .compare_exchange(true, false, Ordering::SeqCst, Ordering::Relaxed)
-                .is_ok()
-            {
-                return Some(sig as c_int);
+            let result = self.pending.exfiltrator.load(slot, sig as c_int);
+            if result.is_some() {
+                return result;
             }
         }
 
@@ -330,9 +402,9 @@ impl Iterator for Pending {
 }
 
 /// Possible results of the [`poll_signal`][SignalIterator::poll_signal] function.
-pub enum PollResult {
+pub enum PollResult<O> {
     /// A signal arrived
-    Signal(c_int),
+    Signal(O),
     /// There are no signals yet but there may arrive some in the future
     Pending,
     /// The iterator was closed. There won't be any signals reported from now on.
@@ -342,18 +414,18 @@ pub enum PollResult {
 }
 
 /// An infinite iterator of received signals.
-pub struct SignalIterator<R> {
-    signals: SignalDelivery<R>,
-    iter: Pending,
+pub struct SignalIterator<R, E: Exfiltrator> {
+    signals: SignalDelivery<R, E>,
+    iter: Pending<E>,
 }
 
-impl<R> SignalIterator<R>
+impl<R, E: Exfiltrator> SignalIterator<R, E>
 where
     R: 'static + AsRawFd + Send + Sync,
 {
     /// Create a new infinite iterator for signals registered with the passed
     /// in [`SignalDelivery`] instance.
-    pub fn new(mut signals: SignalDelivery<R>) -> Self {
+    pub fn new(mut signals: SignalDelivery<R, E>) -> Self {
         let iter = signals.pending();
         Self { signals, iter }
     }
@@ -369,7 +441,7 @@ where
     ///
     /// If the iterator was closed by the [`close`][Handle::close] method of the associtated
     /// [`Handle`] this method will return [`PollResult::Closed`].
-    pub fn poll_signal<F>(&mut self, has_signals: &mut F) -> PollResult
+    pub fn poll_signal<F>(&mut self, has_signals: &mut F) -> PollResult<E::Output>
     where
         F: FnMut(&mut R) -> Result<bool, Error>,
     {
@@ -401,7 +473,7 @@ where
 
     /// Consume this iterator and return the inner
     /// [`SignalDelivery`] instance.
-    pub fn into_inner(self) -> SignalDelivery<R> {
+    pub fn into_inner(self) -> SignalDelivery<R, E> {
         self.signals
     }
 }

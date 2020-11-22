@@ -1,5 +1,10 @@
 # Unreleased
 
+* Bump minimal rustc version to 1.36.0 (signal-hook-registry still builds with
+  1.26.0).
+* (Breaking) Support for exfiltrators ‒ ability to return more than just the
+  signal number from the iterator and streams. Nothing more is implemented yet,
+  but the place to put it is reserved in the API.
 * (Breaking) `pipe::register_raw` now takes ownership and tries to use send
   first, falls back to `O_NONBLOCK` and `write` on failure.
 * (Breaking) All async support is pulled out into separate crates, to decouple
