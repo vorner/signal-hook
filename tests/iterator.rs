@@ -6,7 +6,7 @@ use std::collections::HashSet;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::mpsc::{self, RecvTimeoutError};
 use std::sync::Arc;
-use std::thread;
+use std::thread::{self, JoinHandle};
 use std::time::Duration;
 
 use signal_hook::iterator::{Handle, Signals};
@@ -83,21 +83,64 @@ fn forever_terminates_when_closed() {
 fn signals_block_wait() {
     let mut signals = Signals::new(&[SIGUSR2]).unwrap();
     let (s, r) = mpsc::channel();
-    thread::spawn(move || {
-        // Technically, it may spuriously return early. But it shouldn't be doing it too much, so
-        // we just try to wait multiple times ‒ if they *all* return right away, it is broken.
-        for _ in 0..10 {
-            for _ in signals.wait() {
-                panic!("Someone really did send us SIGUSR2, which breaks the test");
+    let finish = Arc::new(AtomicBool::new(false));
+    let thread_id = thread::spawn({
+        let finish = Arc::clone(&finish);
+        move || {
+            // Technically, it may spuriously return early. But it shouldn't be doing it too much,
+            // so we just try to wait multiple times ‒ if they *all* return right away, it is
+            // broken.
+            for _ in 0..10 {
+                for _ in signals.wait() {
+                    if finish.load(Ordering::SeqCst) {
+                        // Asked to terminate at the end of the thread. Do so (but without
+                        // signalling the receipt).
+                        return;
+                    } else {
+                        panic!("Someone really did send us SIGUSR2, which breaks the test");
+                    }
+                }
+            }
+            let _ = s.send(());
+        }
+    });
+
+    // A RAII guard to make sure we shut down the thread even if the test fails.
+    struct ThreadGuard {
+        thread: Option<JoinHandle<()>>,
+        finish: Arc<AtomicBool>,
+    };
+
+    impl ThreadGuard {
+        fn shutdown(&mut self) {
+            // Tell it to shut down
+            self.finish.store(true, Ordering::SeqCst);
+            // Wake it up
+            send_sigusr2();
+            // Wait for it to actually terminate.
+            if let Some(thread) = self.thread.take() {
+                thread.join().unwrap(); // Propagate panics
             }
         }
-        let _ = s.send(());
-    });
+    }
+
+    impl Drop for ThreadGuard {
+        fn drop(&mut self) {
+            self.shutdown(); // OK if done twice, won't have the thread any more.
+        }
+    }
+
+    let mut bg_thread = ThreadGuard {
+        thread: Some(thread_id),
+        finish,
+    };
 
     let err = r
         .recv_timeout(Duration::from_millis(100))
         .expect_err("Wait didn't wait properly");
     assert_eq!(err, RecvTimeoutError::Timeout);
+
+    bg_thread.shutdown();
 }
 
 #[test]
