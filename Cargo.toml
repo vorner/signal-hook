@@ -22,6 +22,7 @@ members = [
     "signal-hook-registry",
     "signal-hook-tokio",
     "signal-hook-mio",
+    "signal-hook-async-std",
 ]
 
 [dependencies]
