@@ -133,9 +133,9 @@ jobs:
         uses: actions-rs/grcov@v0.1
 
       - name: Upload to codecov.io
-        uses: codecov/codecov-action@v1
+        uses: codecov/codecov-action@239febf655bba88b16ff5dea1d3135ea8663a1f9
         with:
-          token: ${{secrets.CODECOV_TOKEN}}
+          token: ${{ secrets.CODECOV_TOKEN }}
 
 # Disabled, tarpaulin doesn't like signals, not working even with --forward :-(
 #  coverage:
