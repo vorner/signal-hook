@@ -8,6 +8,11 @@
 //!
 //! The [`Signals`] is a type alias for the common case when it is enough to get the signal number.
 //!
+//! This module (and everything in it) is turned by the `iterator` feature. It is **on** by
+//! default, the possibility to turn off is mostly possible for very special purposes (compiling on
+//! `<rustc-1.36`, minimizing the amount of code compiled, …). In a sense, this is the highest
+//! level abstraction of the crate and the API expected to be used by most of the people.
+//!
 //! # Examples
 //!
 //! ```rust
