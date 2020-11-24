@@ -1,3 +1,8 @@
+# 0.2.1
+
+* Allow turning the iterator module off (the `iterator` feature, part of default
+  features). This would allow compiling the crate on 1.31.0.
+
 # 0.2.0
 
 * Bump minimal rustc version to 1.36.0 (signal-hook-registry still builds with
