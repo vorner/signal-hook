@@ -7,14 +7,6 @@
 
 set -ex
 
-if [ "$RUST_VERSION" = 1.26.0 ] ; then
-	rm Cargo.toml
-	cd signal-hook-registry
-	sed -i -e '/signal-hook =/d' Cargo.toml
-	cargo check
-	exit
-fi
-
 rm -f Cargo.lock
 cargo build --all --exclude signal-hook-async-std
 
@@ -33,14 +25,5 @@ fi
 
 export RUSTFLAGS="-D warnings"
 
-cargo build --all --all-features $EXCLUDE_FROM_BUILD
 cargo test --all --all-features $EXCLUDE_FROM_BUILD
 cargo test --all $EXCLUDE_FROM_BUILD
-cargo doc --no-deps
-
-# Sometimes nightly doesn't have clippy or rustfmt, so don't try that there.
-if [ "$RUST_VERSION" = nightly ] ; then
-	exit
-fi
-
-cargo clippy --all $EXCLUDE_FROM_BUILD --tests -- --deny clippy::all
