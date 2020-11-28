@@ -97,7 +97,7 @@
 //! program's threads.
 //!
 //! By the way, if you do want to modify the signal mask (or do other Unix-specific magic), the
-//! [nix](https://crates.io/crates/nix) crate offers safe interface to many low-level functions,
+//! [nix](https://lib.rs/crates/nix) crate offers safe interface to many low-level functions,
 //! including
 //! [`pthread_sigmask`](https://docs.rs/nix/0.11.0/nix/sys/signal/fn.pthread_sigmask.html).
 //!
