@@ -171,3 +171,75 @@ jobs:
 
       - name: Run clippy linter
         run: cargo clippy --all --tests -- -D clippy::all -D warnings
+
+  # There's bunch of platforms that have some weird quirks (or we don't know
+  # that they don't). While fully compiling and testing on them is a bit of a
+  # challenge, running cargo check on them should be easy enough and should
+  # catch at least some problems (like different sizes of types).
+  weird_platforms:
+    name: Check weird platforms
+    strategy:
+      fail-fast: false
+      matrix:
+        target:
+          - x86_64-unknown-linux-musl
+          - x86_64-sun-solaris
+          - x86_64-linux-android
+          - x86_64-apple-ios
+          - x86_64-apple-darwin
+          - aarch64-linux-android
+          - arm-linux-androideabi
+          - mips-unknown-linux-musl
+          - x86_64-unknown-netbsd
+          - x86_64-unknown-freebsd
+
+    runs-on: ubuntu-latest
+    steps:
+      - name: checkout
+        uses: actions/checkout@v2
+
+      - name: Install Rust
+        uses: actions-rs/toolchain@v1
+        with:
+          toolchain: stable
+          profile: minimal
+          default: true
+          target: ${{ matrix.target }}
+
+      - name: Restore cache
+        uses: Swatinem/rust-cache@v1
+
+      - name: Run the check
+        run: cargo check --all --tests --target=${{ matrix.target }}
+
+  # Check some either weirder platforms, but these support only the base crate,
+  # not all the fancy async ones.
+  weirder_platforms:
+    name: Check even weirder platforms
+    strategy:
+      fail-fast: false
+      matrix:
+        target:
+          - x86_64-fuchsia
+          #- wasm32-wasi (not yet? Or not even?)
+          - asmjs-unknown-emscripten
+          # - x86_64-unknown-redox (Is that platform even usable on stable?)
+
+    runs-on: ubuntu-latest
+    steps:
+      - name: checkout
+        uses: actions/checkout@v2
+
+      - name: Install Rust
+        uses: actions-rs/toolchain@v1
+        with:
+          toolchain: stable
+          profile: minimal
+          default: true
+          target: ${{ matrix.target }}
+
+      - name: Restore cache
+        uses: Swatinem/rust-cache@v1
+
+      - name: Run the check
+        run: cargo check --tests --target=${{ matrix.target }}
