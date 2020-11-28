@@ -1,3 +1,5 @@
+* Fixing some doc links on re-exports.
+
 # 0.2.1
 
 * Allow turning the iterator module off (the `iterator` feature, part of default
