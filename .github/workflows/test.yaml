@@ -78,10 +78,18 @@ jobs:
       - name: Restore cache
         uses: Swatinem/rust-cache@v1
 
+      - name: Install cargo-deadlinks
+        uses: actions-rs/install@v0.1
+        with:
+          crate: cargo-deadlinks
+          use-tool-cache: true
+
       - name: Check links
         run: |
           for package in $(cargo metadata --no-deps --format-version=1 | jq -r '.packages[] | .name'); do
             cargo rustdoc -p "$package" --all-features -- -D warnings
+            dname=$(echo "$package" | tr '-' '_')
+            cargo deadlinks --dir "target/doc/$dname" --check-http --ignore-fragments
           done
 
   ancient-registry:

@@ -335,7 +335,7 @@ where
     /// Checks the reading end of the self pipe for available signals.
     ///
     /// If there are no signals available or this instance was already closed it returns
-    /// [`Option::None`]. If there are some signals it returns a [`Pending`](struct.Pending)
+    /// [`Option::None`]. If there are some signals it returns a [`Pending`]
     /// instance wrapped inside a [`Option::Some`]. However, due to implementation details,
     /// this still can produce an empty iterator.
     ///
