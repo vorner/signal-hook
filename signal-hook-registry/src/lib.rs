@@ -121,7 +121,7 @@ struct ActionId(u128);
 /// An ID of registered action.
 ///
 /// This is returned by all the registration routines and can be used to remove the action later on
-/// with a call to [`unregister`](fn.unregister.html).
+/// with a call to [`unregister`].
 #[derive(Copy, Clone, Debug, Eq, PartialEq, Ord, PartialOrd, Hash)]
 pub struct SigId {
     signal: c_int,
@@ -383,7 +383,7 @@ extern "C" fn handler(sig: c_int, info: *mut siginfo_t, data: *mut c_void) {
 /// library refuses to handle them (eg. SIGSEGV). The routines panic in case registering one of
 /// these signals is attempted.
 ///
-/// See [`register`](fn.register.html).
+/// See [`register`].
 pub const FORBIDDEN: &[c_int] = FORBIDDEN_IMPL;
 
 #[cfg(windows)]
@@ -401,7 +401,7 @@ const FORBIDDEN_IMPL: &[c_int] = &[SIGKILL, SIGSTOP, SIGILL, SIGFPE, SIGSEGV];
 /// as part of this library's signal handler, before any actions set through this function.
 ///
 /// On success, the function returns an ID that can be used to remove the action again with
-/// [`unregister`](fn.unregister.html).
+/// [`unregister`].
 ///
 /// # Panics
 ///
@@ -615,8 +615,8 @@ where
 /// This function does nothing if the action was already removed. It returns true if it was removed
 /// and false if the action wasn't found.
 ///
-/// It can unregister all the actions installed by [`register`](fn.register.html) as well as the
-/// ones from downstream crates (like [`signal-hook`](https://docs.rs/signal-hook)).
+/// It can unregister all the actions installed by [`register`] as well as the ones from downstream
+/// crates (like [`signal-hook`](https://docs.rs/signal-hook)).
 ///
 /// # Warning
 ///
@@ -643,16 +643,16 @@ pub fn unregister(id: SigId) -> bool {
 
 /// Removes all previously installed actions for a given signal.
 ///
-/// This is similar to the [`unregister`](fn.unregister.html) function, with the sole difference it
-/// removes all actions for the given signal.
+/// This is similar to the [`unregister`] function, with the sole difference it removes all actions
+/// for the given signal.
 ///
 /// Returns if any hooks were actually removed (returns false if there was no hook registered for
 /// the signal).
 ///
 /// # Warning
 ///
-/// Similar to [`unregister`](fn.unregister.html), this does not manipulate the signal handler in
-/// the OS, it only removes the hooks on the Rust side.
+/// Similar to [`unregister`], this does not manipulate the signal handler in the OS, it only
+/// removes the hooks on the Rust side.
 ///
 /// Furthermore, this will remove *all* signal hooks of the given signal. These may have been
 /// registered by some library or unrelated part of the program. Therefore, this should be only
