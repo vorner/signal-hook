@@ -51,7 +51,7 @@ macro_rules! assert_no_signals {
 #[test]
 #[serial]
 fn forever_terminates_when_closed() {
-    let (signals, controller) = setup_for_sigusr2();
+    let (mut signals, controller) = setup_for_sigusr2();
 
     // Detect early terminations.
     let stopped = Arc::new(AtomicBool::new(false));
@@ -60,7 +60,7 @@ fn forever_terminates_when_closed() {
     let thread = thread::spawn(move || {
         // Eat all the signals there are (might come from a concurrent test, in theory).
         // Would wait forever, but it should be terminated by the close below.
-        for _sig in signals {}
+        for _sig in &mut signals {}
 
         stopped_bg.store(true, Ordering::SeqCst);
     });
@@ -167,7 +167,7 @@ fn wait_returns_recieved_signals() {
 #[test]
 #[serial]
 fn forever_returns_recieved_signals() {
-    let (signals, _) = setup_for_sigusr2();
+    let (mut signals, _) = setup_for_sigusr2();
     send_sigusr2();
 
     let signal = signals.forever().take(1);
@@ -203,7 +203,7 @@ fn wait_unblocks_when_closed() {
 #[test]
 #[serial]
 fn forever_doesnt_block_when_closed() {
-    let (signals, controller) = setup_for_sigusr2();
+    let (mut signals, controller) = setup_for_sigusr2();
     controller.close();
 
     let mut signal = signals.forever();

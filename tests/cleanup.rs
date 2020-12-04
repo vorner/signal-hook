@@ -64,7 +64,7 @@ fn cleanup_inside_signal() {
 #[test]
 fn cleanup_after_signal() {
     fn hook() {
-        let signals = signal_hook::iterator::Signals::new(&[libc::SIGTERM]).unwrap();
+        let mut signals = signal_hook::iterator::Signals::new(&[libc::SIGTERM]).unwrap();
         assert_eq!(Some(libc::SIGTERM), signals.into_iter().next());
         signal_hook::cleanup::cleanup_signal(libc::SIGTERM).unwrap();
     }

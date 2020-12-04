@@ -64,7 +64,7 @@ use std::pin::Pin;
 use libc::c_int;
 
 pub use signal_hook::iterator::backend::Handle;
-use signal_hook::iterator::backend::{PollResult, SignalDelivery, SignalIterator};
+use signal_hook::iterator::backend::{OwningSignalIterator, PollResult, SignalDelivery};
 use signal_hook::iterator::exfiltrator::{Exfiltrator, SignalOnly};
 
 use async_std::os::unix::net::UnixStream;
@@ -77,7 +77,7 @@ use futures::AsyncRead;
 ///
 /// The stream doesn't return the signals in the order they were recieved by
 /// the process and may merge signals received multiple times.
-pub struct SignalsInfo<E: Exfiltrator = SignalOnly>(SignalIterator<UnixStream, E>);
+pub struct SignalsInfo<E: Exfiltrator = SignalOnly>(OwningSignalIterator<UnixStream, E>);
 
 impl<E: Exfiltrator> SignalsInfo<E> {
     /// Create a `Signals` instance.
@@ -101,7 +101,7 @@ impl<E: Exfiltrator> SignalsInfo<E> {
     {
         let (read, write) = UnixStream::pair()?;
         let inner = SignalDelivery::with_pipe(read, write, exfiltrator, signals)?;
-        Ok(Self(SignalIterator::new(inner)))
+        Ok(Self(OwningSignalIterator::new(inner)))
     }
 
     /// Get a shareable [`Handle`] for this `Signals` instance.

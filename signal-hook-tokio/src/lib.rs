@@ -22,14 +22,14 @@ macro_rules! implement_signals_with_pipe {
         use libc::c_int;
 
         pub use signal_hook::iterator::backend::Handle;
-        use signal_hook::iterator::backend::{SignalDelivery, SignalIterator};
+        use signal_hook::iterator::backend::{OwningSignalIterator, SignalDelivery};
         use signal_hook::iterator::exfiltrator::{Exfiltrator, SignalOnly};
 
         /// An asynchronous [`Stream`] of arriving signals.
         ///
         /// The stream doesn't return the signals in the order they were recieved by
         /// the process and may merge signals received multiple times.
-        pub struct SignalsInfo<E: Exfiltrator = SignalOnly>(SignalIterator<$pipe, E>);
+        pub struct SignalsInfo<E: Exfiltrator = SignalOnly>(OwningSignalIterator<$pipe, E>);
 
         impl<E: Exfiltrator> SignalsInfo<E> {
             /// Create a `SignalsInfo` instance.
@@ -53,7 +53,7 @@ macro_rules! implement_signals_with_pipe {
             {
                 let (read, write) = UnixStream::pair()?;
                 let inner = SignalDelivery::with_pipe(read, write, exfiltrator, signals)?;
-                Ok(Self(SignalIterator::new(inner)))
+                Ok(Self(OwningSignalIterator::new(inner)))
             }
 
             /// Get a shareable [`Handle`] for this `Signals` instance.

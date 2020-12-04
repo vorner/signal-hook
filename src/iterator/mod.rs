@@ -67,7 +67,7 @@ use std::os::unix::net::UnixStream;
 use libc::{self, c_int};
 
 pub use self::backend::{Handle, Pending};
-use self::backend::{PollResult, SignalDelivery, SignalIterator};
+use self::backend::{PollResult, RefSignalIterator, SignalDelivery};
 use self::exfiltrator::{Exfiltrator, SignalOnly};
 
 /// The main structure of the module, representing interest in some signals.
@@ -100,10 +100,10 @@ use self::exfiltrator::{Exfiltrator, SignalOnly};
 ///
 /// #
 /// # fn main() -> Result<(), Error> {
-/// let signals = Signals::new(&[signal_hook::SIGUSR1, signal_hook::SIGUSR2])?;
+/// let mut signals = Signals::new(&[signal_hook::SIGUSR1, signal_hook::SIGUSR2])?;
 /// let handle = signals.handle();
 /// let thread = thread::spawn(move || {
-///     for signal in signals {
+///     for signal in &mut signals {
 ///         match signal {
 ///             signal_hook::SIGUSR1 => {},
 ///             signal_hook::SIGUSR2 => {},
@@ -218,14 +218,14 @@ impl<E: Exfiltrator> SignalsInfo<E> {
         self.handle().is_closed()
     }
 
-    /// Consume this instance and return an infinite iterator over arriving signals.
+    /// Get an infinite iterator over arriving signals.
     ///
     /// The iterator's `next()` blocks as necessary to wait for signals to arrive. This is adequate
     /// if you want to designate a thread solely to handling signals. If multiple signals come at
     /// the same time (between two values produced by the iterator), they will be returned in
     /// arbitrary order. Multiple instances of the same signal may be collated.
     ///
-    /// This is also the iterator returned by `IntoIterator` implementation on `Signals`.
+    /// This is also the iterator returned by `IntoIterator` implementation on `&mut Signals`.
     ///
     /// This iterator terminates only if explicitly [closed][Handle::close].
     ///
@@ -241,7 +241,7 @@ impl<E: Exfiltrator> SignalsInfo<E> {
     /// use signal_hook::iterator::Signals;
     ///
     /// # fn main() -> Result<(), Error> {
-    /// let signals = Signals::new(&[signal_hook::SIGUSR1, signal_hook::SIGUSR2])?;
+    /// let mut signals = Signals::new(&[signal_hook::SIGUSR1, signal_hook::SIGUSR2])?;
     /// let handle = signals.handle();
     /// thread::spawn(move || {
     ///     for signal in signals.forever() {
@@ -256,8 +256,8 @@ impl<E: Exfiltrator> SignalsInfo<E> {
     /// # Ok(())
     /// # }
     /// ```
-    pub fn forever(self) -> Forever<E> {
-        Forever(SignalIterator::new(self.0))
+    pub fn forever(&mut self) -> Forever<E> {
+        Forever(RefSignalIterator::new(&mut self.0))
     }
 
     /// Get a shareable handle to a [`Handle`] for this instance.
@@ -278,26 +278,18 @@ where
     }
 }
 
-impl<E: Exfiltrator> IntoIterator for SignalsInfo<E> {
+impl<'a, E: Exfiltrator> IntoIterator for &'a mut SignalsInfo<E> {
     type Item = E::Output;
-    type IntoIter = Forever<E>;
+    type IntoIter = Forever<'a, E>;
     fn into_iter(self) -> Self::IntoIter {
         self.forever()
     }
 }
 
 /// An infinit iterator of arriving signals.
-pub struct Forever<E: Exfiltrator>(SignalIterator<UnixStream, E>);
+pub struct Forever<'a, E: Exfiltrator>(RefSignalIterator<'a, UnixStream, E>);
 
-impl<E: Exfiltrator> Forever<E> {
-    /// Consume this iterator and return the inner
-    /// [`Signals`] instance.
-    pub fn into_inner(self) -> SignalsInfo<E> {
-        SignalsInfo(self.0.into_inner())
-    }
-}
-
-impl<E: Exfiltrator> Iterator for Forever<E> {
+impl<'a, E: Exfiltrator> Iterator for Forever<'a, E> {
     type Item = E::Output;
 
     fn next(&mut self) -> Option<E::Output> {
