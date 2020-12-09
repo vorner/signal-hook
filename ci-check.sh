@@ -8,16 +8,18 @@
 set -ex
 
 rm -f Cargo.lock
-cargo build --all --exclude signal-hook-async-std
+cargo build --all --exclude signal-hook-async-std --exclude signal-hook-sys
 
 if [ "$RUST_VERSION" = 1.36.0 ] ; then
 	exit
 fi
 
-if [ "$OS" = "windows-latest" ] ; then
+if [ "$OS" = "windows-latest" ] || [ "$RUST_VERSION" = 1.40.0 ]; then
 	# The async support crates rely on the iterator module
 	# which isn't available for windows. So exclude them
 	# from the build.
+
+	# Also, some dependencies of the runtimes don't like 1.40.
 	EXCLUDE_FROM_BUILD="--exclude signal-hook-mio --exclude signal-hook-tokio --exclude signal-hook-async-std"
 else
 	EXCLUDE_FROM_BUILD=""

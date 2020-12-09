@@ -11,6 +11,9 @@
 //! Currently, the trait is sealed and all methods hidden. This is likely temporary, until some
 //! experience with them is gained.
 
+#[cfg(feature = "extended-siginfo")]
+pub mod origin;
+
 use std::sync::atomic::{AtomicBool, Ordering};
 
 use libc::{c_int, siginfo_t};
