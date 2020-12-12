@@ -17,9 +17,10 @@ edition = "2018"
 maintenance = { status = "actively-developed" }
 
 [features]
-default = ["iterator"]
+channel = []
+default = ["channel", "iterator"]
 iterator = []
-extended-siginfo = ["iterator", "signal-hook-sys"]
+extended-siginfo = ["channel", "iterator", "signal-hook-sys"]
 
 [workspace]
 members = [
