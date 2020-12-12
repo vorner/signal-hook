@@ -37,7 +37,7 @@
 //!
 //! If you want to combine setting some flags with a self-pipe pattern, the flag needs to be set
 //! first, then the pipe written. On the read end, first the pipe needs to be cleaned, then the
-//! flag and then the action taken. This is what the [`Signals`](../iterator/struct.Signals.html)
+//! flag and then the action taken. This is what the [`SignalsInfo`][crate::iterator::SignalsInfo]
 //! structure does internally.
 //!
 //! # Write collating
