@@ -1,4 +1,4 @@
-use futures::stream::StreamExt;
+use async_std::stream::StreamExt;
 
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;

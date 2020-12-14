@@ -12,9 +12,7 @@
 //! ```rust
 //! use std::io::Error;
 //!
-//! use async_std;
-//!
-//! use futures::stream::StreamExt;
+//! use async_std::prelude::*;
 //!
 //! use signal_hook;
 //! use signal_hook_async_std::Signals;
@@ -67,11 +65,10 @@ pub use signal_hook::iterator::backend::Handle;
 use signal_hook::iterator::backend::{PollResult, SignalDelivery, SignalIterator};
 use signal_hook::iterator::exfiltrator::{Exfiltrator, SignalOnly};
 
+use async_std::io::Read;
 use async_std::os::unix::net::UnixStream;
-
-use futures::stream::Stream;
-use futures::task::{Context, Poll};
-use futures::AsyncRead;
+use async_std::stream::Stream;
+use async_std::task::{Context, Poll};
 
 /// An asynchronous [`Stream`] of arriving signals.
 ///
