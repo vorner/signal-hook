@@ -21,7 +21,10 @@ jobs:
           - stable
           - beta
           - nightly
+          # Introduction of self: Arc<..>, needed for the iterator module
           - 1.36.0
+          # Introduction of non_exhaustive, used at certain exfiltrators
+          - 1.40.0
 
     runs-on: ${{ matrix.os }}
 
@@ -170,7 +173,7 @@ jobs:
         uses: Swatinem/rust-cache@v1
 
       - name: Run clippy linter
-        run: cargo clippy --all --tests -- -D clippy::all -D warnings
+        run: cargo clippy --all --all-features --tests -- -D clippy::all -D warnings
 
   # There's bunch of platforms that have some weird quirks (or we don't know
   # that they don't). While fully compiling and testing on them is a bit of a
@@ -185,45 +188,22 @@ jobs:
           - x86_64-unknown-linux-musl
           - x86_64-sun-solaris
           - x86_64-linux-android
-          - x86_64-apple-ios
-          - x86_64-apple-darwin
           - aarch64-linux-android
           - arm-linux-androideabi
           - mips-unknown-linux-musl
           - x86_64-unknown-netbsd
           - x86_64-unknown-freebsd
-
-    runs-on: ubuntu-latest
-    steps:
-      - name: checkout
-        uses: actions/checkout@v2
-
-      - name: Install Rust
-        uses: actions-rs/toolchain@v1
-        with:
-          toolchain: stable
-          profile: minimal
-          default: true
-          target: ${{ matrix.target }}
-
-      - name: Restore cache
-        uses: Swatinem/rust-cache@v1
-
-      - name: Run the check
-        run: cargo check --all --tests --target=${{ matrix.target }}
-
-  # Check some either weirder platforms, but these support only the base crate,
-  # not all the fancy async ones.
-  weirder_platforms:
-    name: Check even weirder platforms
-    strategy:
-      fail-fast: false
-      matrix:
-        target:
-          - x86_64-fuchsia
-          #- wasm32-wasi (not yet? Or not even?)
-          - asmjs-unknown-emscripten
+        extra-args:
+          - "--all --all-features"
+        include:
+          # - wasm32-wasi (not yet? Or not ever?)
           # - x86_64-unknown-redox (Is that platform even usable on stable?)
+          - { target: x86_64-fuchsia, extra-args: "--all-features" }
+          - { target: asmjs-unknown-emscripten, extra-args: "--all-features" }
+          # Seems we have some trouble with properly running C compiler on these. Might as well be problem with cross-compilation setup, but who knows
+          # So we avoid the exfiltrator part/signal-hook-sys :-(
+          - { target: x86_64-apple-darwin, extra-args: "--features=iterator --all --exclude signal-hook-sys" }
+          - { target: x86_64-apple-ios, extra-args: "--features=iterator --all --exclude signal-hook-sys" }
 
     runs-on: ubuntu-latest
     steps:
@@ -242,4 +222,8 @@ jobs:
         uses: Swatinem/rust-cache@v1
 
       - name: Run the check
-        run: cargo check --tests --target=${{ matrix.target }}
+        uses: actions-rs/cargo@v1
+        with:
+          command: check
+          args: ${{ matrix.extra-args }} --tests --target=${{ matrix.target }}
+          use-cross: true

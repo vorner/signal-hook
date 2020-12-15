@@ -11,6 +11,9 @@
 //! Currently, the trait is sealed and all methods hidden. This is likely temporary, until some
 //! experience with them is gained.
 
+#[cfg(feature = "extended-siginfo")]
+pub mod origin;
+
 use std::sync::atomic::{AtomicBool, Ordering};
 
 use libc::{c_int, siginfo_t};
@@ -81,6 +84,23 @@ mod sealed {
         /// same thread ‒ a `store` may „interrupt“ a call to `load`). It is up to the implementer
         /// to deal with that.
         fn load(&self, slot: &Self::Storage, signal: c_int) -> Option<Self::Output>;
+
+        /// Initialize the given slot for the given signal before the first use.
+        ///
+        /// This is called before the first use of the given slot (and it is annotated with the
+        /// corresponding signal). The default does nothing, this is just an opportunity to
+        /// allocate data lazily (this is called outside of the signal handler, so it doesn't have
+        /// to be async-signal-safe). It will be called at most once for each slot.
+        ///
+        /// Note that you can rely on this being called for correctness, but not for safety (this
+        /// crate calls it before the first use, but a user abusing the trait might not and in such
+        /// case it is OK to eg. lose signals, but not segfault).
+        fn init(&self, slot: &Self::Storage, signal: c_int) {
+            // Suppress unused variable warning without putting the underscores into public
+            // signature.
+            let _ = slot;
+            let _ = signal;
+        }
     }
 }
 

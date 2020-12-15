@@ -17,8 +17,10 @@ edition = "2018"
 maintenance = { status = "actively-developed" }
 
 [features]
-default = ["iterator"]
+channel = []
+default = ["channel", "iterator"]
 iterator = []
+extended-siginfo = ["channel", "iterator", "signal-hook-sys"]
 
 [workspace]
 members = [
@@ -27,11 +29,13 @@ members = [
     "signal-hook-tokio",
     "signal-hook-mio",
     "signal-hook-async-std",
+    "signal-hook-sys",
 ]
 
 [dependencies]
 libc = "~0.2"
 signal-hook-registry = { version = "~1.2", path = "signal-hook-registry" }
+signal-hook-sys = { version = "~0.1", path = "signal-hook-sys", optional = true }
 
 [dev-dependencies]
 serial_test = "~0.5"

@@ -134,6 +134,7 @@ impl<E: Exfiltrator> AddSignal for PendingSignals<E> {
             signal,
             self.exfiltrator,
         );
+        self.exfiltrator.init(&self.slots[signal as usize], signal);
 
         let action = move |act: &_| {
             let slot = &self.slots[signal as usize];
@@ -390,10 +391,11 @@ impl<E: Exfiltrator> Iterator for Pending<E> {
         while self.position < self.pending.slots.len() {
             let sig = self.position;
             let slot = &self.pending.slots[sig];
-            self.position += 1;
             let result = self.pending.exfiltrator.load(slot, sig as c_int);
             if result.is_some() {
                 return result;
+            } else {
+                self.position += 1;
             }
         }
 

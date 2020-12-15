@@ -4,7 +4,7 @@
 //! the [`SignalsInfo`] structure which is able to iterate over the
 //! incoming signals. The structure is parametrized by an
 //! [`Exfiltrator`][self::exfiltrator::Exfiltrator], which specifies what information is returned
-//! for each delivered signal.
+//! for each delivered signal. Note that some exfiltrators are behind a feature flag.
 //!
 //! The [`Signals`] is a type alias for the common case when it is enough to get the signal number.
 //!
@@ -88,6 +88,12 @@ use self::exfiltrator::{Exfiltrator, SignalOnly};
 ///
 /// The controller handle can be shared between as many threads as you like using its
 /// [`clone`][Handle::clone] method.
+///
+/// # Exfiltrators
+///
+/// The [`SignalOnly]` provides only the signal number. There are further exfiltrators available in
+/// the [`exfiltrator`] module. Note that some of them are behind feature flags that need to be
+/// enabled.
 ///
 /// # Examples
 ///

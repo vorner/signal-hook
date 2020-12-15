@@ -175,6 +175,8 @@
 extern crate libc;
 extern crate signal_hook_registry;
 
+#[cfg(feature = "channel")]
+pub mod channel;
 pub mod cleanup;
 pub mod flag;
 #[cfg(all(not(windows), feature = "iterator"))]
