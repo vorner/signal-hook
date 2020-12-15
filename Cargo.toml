@@ -1,6 +1,6 @@
 [package]
 name = "signal-hook"
-version = "0.2.1"
+version = "0.2.2"
 authors = [
     "Michal 'vorner' Vaner <vorner@vorner.cz>",
     "Thomas Himmelstoss <thimm@posteo.de>",
