@@ -40,8 +40,9 @@ jobs:
           CARGO_INCREMENTAL: '0'
           RUSTFLAGS: '-Zprofile -Ccodegen-units=1 -Cinline-threshold=0 -Clink-dead-code -Coverflow-checks=off -Cpanic=abort -Zpanic_abort_tests'
           RUSTDOCFLAGS: '-Zprofile -Ccodegen-units=1 -Cinline-threshold=0 -Clink-dead-code -Coverflow-checks=off -Cpanic=abort -Zpanic_abort_tests'
-          CFLAGS: --coverage
-          CXXFLAGS: --coverage
+          # This seems not to work, the C code can't seem to find the gcov functions. By not providing this, we probably give up coverage from these :-(
+          #CFLAGS: --coverage
+          #CXXFLAGS: --coverage
 
       - name: Generate coverage
         uses: actions-rs/grcov@v0.1
