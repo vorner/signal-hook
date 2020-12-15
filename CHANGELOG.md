@@ -1,3 +1,4 @@
+* Extractor for the origin of a signal (PID, UID, what caused it).
 * Fixing some doc links on re-exports.
 
 # 0.2.1
