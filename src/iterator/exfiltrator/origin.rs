@@ -6,12 +6,23 @@
 //!
 //! See the [`WithOrigin`] example.
 
-use std::sync::atomic::{AtomicU64, Ordering};
+// Note on unsafety in this module:
+// * Implementing an unsafe trait, that one needs to ensure at least store is async-signal-safe.
+//   That's done by delegating to the Channel (and reading an atomic pointer, but that one is
+//   primitive op).
+// * A bit of juggling with atomic and raw pointers. In effect, that is just late lazy
+//   initialization, the Slot is in line with Option would be, except that it is set atomically
+//   during the init. Lifetime is ensured by not dropping until the Drop of the whole slot and that
+//   is checked by taking `&mut self`.
+
+use std::ptr;
+use std::sync::atomic::{AtomicPtr, Ordering};
 
 use libc::{c_int, pid_t, siginfo_t, uid_t};
-use signal_hook_sys::internal::{Process as IProcess, SigInfo};
+use signal_hook_sys::internal::SigInfo;
 
 use super::sealed::Exfiltrator;
+use crate::channel::Channel;
 
 /// Information about process, as presented in the signal metadata.
 #[derive(Copy, Clone, Debug, Eq, PartialEq)]
@@ -22,15 +33,6 @@ pub struct Process {
 
     /// The user owning the process.
     pub uid: uid_t,
-}
-
-impl From<IProcess> for Process {
-    fn from(p: IProcess) -> Self {
-        Self {
-            pid: p.pid,
-            uid: p.uid,
-        }
-    }
 }
 
 /// Information about a signal and its origin.
@@ -53,13 +55,15 @@ pub struct Origin {
     // TODO: Figure out a better encoding somehow and expose other info, including the Cause
 }
 
-#[doc(hidden)]
-#[derive(Debug)]
-pub struct OriginStorage(AtomicU64);
+#[derive(Default, Debug)]
+struct Slot(AtomicPtr<Channel<Origin>>);
 
-impl Default for OriginStorage {
-    fn default() -> Self {
-        Self(AtomicU64::new(IProcess::EMPTY.to_u64()))
+impl Drop for Slot {
+    fn drop(&mut self) {
+        let ptr = self.0.swap(ptr::null_mut(), Ordering::Acquire);
+        if !ptr.is_null() {
+            unsafe { drop(Box::from_raw(ptr)) }
+        }
     }
 }
 
@@ -92,32 +96,38 @@ impl Default for OriginStorage {
 pub struct WithOrigin;
 
 unsafe impl Exfiltrator for WithOrigin {
-    type Storage = OriginStorage;
+    type Storage = AtomicPtr<Channel<Origin>>;
     type Output = Origin;
     fn supports_signal(&self, _: c_int) -> bool {
         true
     }
 
-    fn store(&self, slot: &OriginStorage, _: c_int, info: &siginfo_t) {
-        let value = SigInfo::extract(info)
-            .process
-            .unwrap_or(IProcess::NO_PROCESS)
-            .to_u64();
-        slot.0.store(value, Ordering::SeqCst);
+    fn store(&self, slot: &Self::Storage, signal: c_int, info: &siginfo_t) {
+        let process = SigInfo::extract(info).process.map(|p| Process {
+            pid: p.pid,
+            uid: p.uid,
+        });
+        let origin = Origin { signal, process };
+        // Condition just not to crash if someone forgot to call init.
+        //
+        // Lifetime is from init to our own drop, and drop needs &mut self.
+        if let Some(slot) = unsafe { slot.load(Ordering::Acquire).as_ref() } {
+            slot.send(origin);
+        }
     }
 
-    fn load(&self, slot: &OriginStorage, signal: c_int) -> Option<Origin> {
-        let value = slot.0.swap(IProcess::EMPTY.to_u64(), Ordering::SeqCst);
-        match IProcess::from_u64(value) {
-            IProcess::EMPTY => None,
-            IProcess::NO_PROCESS => Some(Origin {
-                signal,
-                process: None,
-            }),
-            process => Some(Origin {
-                signal,
-                process: Some(process.into()),
-            }),
-        }
+    fn load(&self, slot: &Self::Storage, _: c_int) -> Option<Origin> {
+        let slot = unsafe { slot.load(Ordering::Acquire).as_ref() };
+        // Condition just not to crash if someone forgot to call init.
+        slot.and_then(|s| s.recv())
+    }
+
+    fn init(&self, slot: &Self::Storage, _: c_int) {
+        let new = Box::new(Channel::default());
+        let old = slot.swap(Box::into_raw(new), Ordering::Release);
+        // We leak the pointer on purpose here. This is invalid state anyway and must not happen,
+        // but if it still does, we can't drop that while some other thread might still be having
+        // the raw pointer.
+        assert!(old.is_null(), "Init called multiple times");
     }
 }

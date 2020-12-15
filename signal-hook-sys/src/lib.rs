@@ -76,22 +76,6 @@ pub mod internal {
                 uid: sighook_signal_uid(info),
             }
         }
-
-        pub const fn to_u64(self) -> u64 {
-            let pid = self.pid as u32; // With overflow for negative ones
-            let uid = self.uid as u32;
-            ((pid as u64) << 32) | (uid as u64)
-        }
-
-        pub const fn from_u64(encoded: u64) -> Self {
-            let pid = ((encoded >> 32) as u32) as _;
-            let uid = (encoded as u32) as _;
-            Self { pid, uid }
-        }
-
-        pub const EMPTY: Self = Self { pid: -1, uid: 0 };
-
-        pub const NO_PROCESS: Self = Self { pid: -1, uid: 1 };
     }
 
     #[derive(Clone, Debug, Eq, PartialEq)]
