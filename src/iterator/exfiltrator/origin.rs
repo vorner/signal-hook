@@ -157,8 +157,9 @@ pub struct Origin {
     pub cause: Cause,
 }
 
+#[doc(hidden)]
 #[derive(Default, Debug)]
-struct Slot(AtomicPtr<Channel<Origin>>);
+pub struct Slot(AtomicPtr<Channel<Origin>>);
 
 impl Drop for Slot {
     fn drop(&mut self) {
@@ -198,7 +199,7 @@ impl Drop for Slot {
 pub struct WithOrigin;
 
 unsafe impl Exfiltrator for WithOrigin {
-    type Storage = AtomicPtr<Channel<Origin>>;
+    type Storage = Slot;
     type Output = Origin;
     fn supports_signal(&self, _: c_int) -> bool {
         true
@@ -218,20 +219,20 @@ unsafe impl Exfiltrator for WithOrigin {
         // Condition just not to crash if someone forgot to call init.
         //
         // Lifetime is from init to our own drop, and drop needs &mut self.
-        if let Some(slot) = unsafe { slot.load(Ordering::Acquire).as_ref() } {
+        if let Some(slot) = unsafe { slot.0.load(Ordering::Acquire).as_ref() } {
             slot.send(origin);
         }
     }
 
     fn load(&self, slot: &Self::Storage, _: c_int) -> Option<Origin> {
-        let slot = unsafe { slot.load(Ordering::Acquire).as_ref() };
+        let slot = unsafe { slot.0.load(Ordering::Acquire).as_ref() };
         // Condition just not to crash if someone forgot to call init.
         slot.and_then(|s| s.recv())
     }
 
     fn init(&self, slot: &Self::Storage, _: c_int) {
         let new = Box::new(Channel::default());
-        let old = slot.swap(Box::into_raw(new), Ordering::Release);
+        let old = slot.0.swap(Box::into_raw(new), Ordering::Release);
         // We leak the pointer on purpose here. This is invalid state anyway and must not happen,
         // but if it still does, we can't drop that while some other thread might still be having
         // the raw pointer.
