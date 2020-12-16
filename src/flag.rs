@@ -24,42 +24,41 @@
 //! multiple termination signals arrive before it is handled, it recognizes the last one.
 //!
 //! ```rust
-//! extern crate signal_hook;
-//!
 //! use std::io::Error;
 //! use std::sync::Arc;
 //! use std::sync::atomic::{AtomicUsize, Ordering};
 //!
+//! use signal_hook::consts::signal::*;
 //! use signal_hook::flag as signal_flag;
 //!
 //! fn main() -> Result<(), Error> {
 //!     let term = Arc::new(AtomicUsize::new(0));
-//!     const SIGTERM: usize = signal_hook::SIGTERM as usize;
-//!     const SIGINT: usize = signal_hook::SIGINT as usize;
+//!     const SIGTERM_U: usize = SIGTERM as usize;
+//!     const SIGINT_U: usize = SIGINT as usize;
 //! #   #[cfg(not(windows))]
-//!     const SIGQUIT: usize = signal_hook::SIGQUIT as usize;
-//!     signal_flag::register_usize(signal_hook::SIGTERM, Arc::clone(&term), SIGTERM)?;
-//!     signal_flag::register_usize(signal_hook::SIGINT, Arc::clone(&term), SIGINT)?;
+//!     const SIGQUIT_U: usize = SIGQUIT as usize;
+//!     signal_flag::register_usize(SIGTERM, Arc::clone(&term), SIGTERM_U)?;
+//!     signal_flag::register_usize(SIGINT, Arc::clone(&term), SIGINT_U)?;
 //! #   #[cfg(not(windows))]
-//!     signal_flag::register_usize(signal_hook::SIGQUIT, Arc::clone(&term), SIGQUIT)?;
+//!     signal_flag::register_usize(SIGQUIT, Arc::clone(&term), SIGQUIT_U)?;
 //!
 //! #   // Hack to terminate the example when run as a doc-test.
-//! #   term.store(SIGTERM, Ordering::Relaxed);
+//! #   term.store(SIGTERM_U, Ordering::Relaxed);
 //!     loop {
 //!         match term.load(Ordering::Relaxed) {
 //!             0 => {
 //!                 // Do some useful stuff here
 //!             }
-//!             SIGTERM => {
+//!             SIGTERM_U => {
 //!                 eprintln!("Terminating on the TERM signal");
 //!                 break;
 //!             }
-//!             SIGINT => {
+//!             SIGINT_U => {
 //!                 eprintln!("Terminating on the INT signal");
 //!                 break;
 //!             }
 //! #           #[cfg(not(windows))]
-//!             SIGQUIT => {
+//!             SIGQUIT_U => {
 //!                 eprintln!("Terminating on the QUIT signal");
 //!                 break;
 //!             }
@@ -74,26 +73,25 @@
 //! Sending a signal to self and seeing it arrived (not of a practical usage on itself):
 //!
 //! ```rust
-//! extern crate libc;
-//! extern crate signal_hook;
-//!
 //! use std::io::Error;
 //! use std::sync::Arc;
 //! use std::sync::atomic::{AtomicBool, Ordering};
 //! use std::thread;
 //! use std::time::Duration;
 //!
+//! use signal_hook::consts::signal::*;
+//!
 //! fn main() -> Result<(), Error> {
 //!     let got = Arc::new(AtomicBool::new(false));
 //! #   #[cfg(not(windows))]
-//!     signal_hook::flag::register(signal_hook::SIGUSR1, Arc::clone(&got))?;
+//!     signal_hook::flag::register(SIGUSR1, Arc::clone(&got))?;
 //! #   #[cfg(windows)]
-//! #   signal_hook::flag::register(signal_hook::SIGTERM, Arc::clone(&got))?;
+//! #   signal_hook::flag::register(SIGTERM, Arc::clone(&got))?;
 //!     unsafe {
 //! #       #[cfg(not(windows))]
-//!         libc::raise(signal_hook::SIGUSR1);
+//!         libc::raise(SIGUSR1);
 //! #       #[cfg(windows)]
-//! #       libc::raise(signal_hook::SIGTERM);
+//! #       libc::raise(SIGTERM);
 //!     }
 //!     // A sleep here, because it could run the signal handler in another thread and we may not
 //!     // see the flag right away. This is still a hack and not guaranteed to work, it is just an
@@ -108,12 +106,11 @@
 //! together with reopening the log file).
 //!
 //! ```rust
-//! extern crate signal_hook;
-//!
 //! use std::io::Error;
 //! use std::sync::Arc;
 //! use std::sync::atomic::{AtomicBool, Ordering};
 //!
+//! use signal_hook::consts::signal::*;
 //! use signal_hook::flag as signal_flag;
 //!
 //! fn main() -> Result<(), Error> {
@@ -121,11 +118,11 @@
 //!     let reload = Arc::new(AtomicBool::new(true));
 //!     let term = Arc::new(AtomicBool::new(false));
 //! #   #[cfg(not(windows))]
-//!     signal_flag::register(signal_hook::SIGHUP, Arc::clone(&reload))?;
-//!     signal_flag::register(signal_hook::SIGINT, Arc::clone(&term))?;
-//!     signal_flag::register(signal_hook::SIGTERM, Arc::clone(&term))?;
+//!     signal_flag::register(SIGHUP, Arc::clone(&reload))?;
+//!     signal_flag::register(SIGINT, Arc::clone(&term))?;
+//!     signal_flag::register(SIGTERM, Arc::clone(&term))?;
 //! #   #[cfg(not(windows))]
-//!     signal_flag::register(signal_hook::SIGQUIT, Arc::clone(&term))?;
+//!     signal_flag::register(SIGQUIT, Arc::clone(&term))?;
 //!     while !term.load(Ordering::Relaxed) {
 //!         // Using swap here, not load, to reset it back to false once it is reloaded.
 //!         if reload.swap(false, Ordering::Relaxed) {
@@ -169,13 +166,14 @@ mod tests {
     use std::time::{Duration, Instant};
 
     use super::*;
+    use crate::consts::signal::*;
 
     fn self_signal() {
         unsafe {
             #[cfg(not(windows))]
-            libc::raise(crate::SIGUSR1);
+            libc::raise(SIGUSR1);
             #[cfg(windows)]
-            libc::raise(crate::SIGTERM);
+            libc::raise(SIGTERM);
         }
     }
 
@@ -198,7 +196,7 @@ mod tests {
         // When we register the action, it is active.
         let flag = Arc::new(AtomicBool::new(false));
         #[cfg(not(windows))]
-        let signal = register(crate::SIGUSR1, Arc::clone(&flag)).unwrap();
+        let signal = register(SIGUSR1, Arc::clone(&flag)).unwrap();
         #[cfg(windows)]
         let signal = register(crate::SIGTERM, Arc::clone(&flag)).unwrap();
         self_signal();

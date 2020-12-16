@@ -140,15 +140,13 @@
 //! # Examples
 //!
 //! ```rust
-//! extern crate signal_hook;
-//!
 //! use std::io::Error;
 //! use std::sync::Arc;
 //! use std::sync::atomic::{AtomicBool, Ordering};
 //!
 //! fn main() -> Result<(), Error> {
 //!     let term = Arc::new(AtomicBool::new(false));
-//!     signal_hook::flag::register(signal_hook::SIGTERM, Arc::clone(&term))?;
+//!     signal_hook::flag::register(signal_hook::consts::SIGTERM, Arc::clone(&term))?;
 //!     while !term.load(Ordering::Relaxed) {
 //!         // Do some time-limited stuff here
 //!         // (if this could block forever, then there's no guarantee the signal will have any
@@ -184,22 +182,40 @@ pub mod iterator;
 #[cfg(not(windows))]
 pub mod pipe;
 
-#[cfg(not(windows))]
-pub use libc::{
-    SIGABRT, SIGALRM, SIGBUS, SIGCHLD, SIGCONT, SIGFPE, SIGHUP, SIGILL, SIGINT, SIGIO, SIGKILL,
-    SIGPIPE, SIGPROF, SIGQUIT, SIGSEGV, SIGSTOP, SIGSYS, SIGTERM, SIGTRAP, SIGTSTP, SIGTTIN,
-    SIGTTOU, SIGURG, SIGUSR1, SIGUSR2, SIGVTALRM, SIGWINCH, SIGXCPU, SIGXFSZ,
-};
+/// The low-level constants.
+///
+/// Like the signal numbers.
+pub mod consts {
 
-#[cfg(windows)]
-pub use libc::{SIGABRT, SIGFPE, SIGILL, SIGINT, SIGSEGV, SIGTERM};
+    /// The signal constants.
+    ///
+    /// Can be mass-imported by `use signal_hook::consts::signal::*`, without polluting the
+    /// namespace with other names. Also available in the [`consts`][crate::consts] directly (but
+    /// with more constants around).
+    pub mod signal {
+        #[cfg(not(windows))]
+        pub use libc::{
+            SIGABRT, SIGALRM, SIGBUS, SIGCHLD, SIGCONT, SIGFPE, SIGHUP, SIGILL, SIGINT, SIGIO,
+            SIGKILL, SIGPIPE, SIGPROF, SIGQUIT, SIGSEGV, SIGSTOP, SIGSYS, SIGTERM, SIGTRAP,
+            SIGTSTP, SIGTTIN, SIGTTOU, SIGURG, SIGUSR1, SIGUSR2, SIGVTALRM, SIGWINCH, SIGXCPU,
+            SIGXFSZ,
+        };
 
-// NOTE: they perhaps deserve backport to libc.
-#[cfg(windows)]
-/// Same as `SIGABRT`, but the number is compatible to other platforms.
-pub const SIGABRT_COMPAT: libc::c_int = 6;
-#[cfg(windows)]
-/// Ctrl-Break is pressed for Windows Console processes.
-pub const SIGBREAK: libc::c_int = 21;
+        #[cfg(windows)]
+        pub use libc::{SIGABRT, SIGFPE, SIGILL, SIGINT, SIGSEGV, SIGTERM};
 
-pub use signal_hook_registry::{register, unregister, SigId, FORBIDDEN};
+        // NOTE: they perhaps deserve backport to libc.
+        #[cfg(windows)]
+        /// Same as `SIGABRT`, but the number is compatible to other platforms.
+        pub const SIGABRT_COMPAT: libc::c_int = 6;
+        #[cfg(windows)]
+        /// Ctrl-Break is pressed for Windows Console processes.
+        pub const SIGBREAK: libc::c_int = 21;
+    }
+
+    pub use self::signal::*;
+
+    pub use signal_hook_registry::FORBIDDEN;
+}
+
+pub use signal_hook_registry::{register, unregister, SigId};

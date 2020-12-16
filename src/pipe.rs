@@ -57,17 +57,16 @@
 //! terminating). It sends the signal to itself, so it correctly terminates.
 //!
 //! ```rust
-//! extern crate libc;
-//! extern crate signal_hook;
-//!
 //! use std::io::{Error, Read};
 //! use std::os::unix::net::UnixStream;
 //!
+//! use signal_hook::consts::SIGUSR1;
+//!
 //! fn main() -> Result<(), Error> {
 //!     let (mut read, write) = UnixStream::pair()?;
-//!     signal_hook::pipe::register(signal_hook::SIGUSR1, write)?;
+//!     signal_hook::pipe::register(SIGUSR1, write)?;
 //!     // This will write into the pipe write end through the signal handler
-//!     unsafe { libc::raise(signal_hook::SIGUSR1) };
+//!     unsafe { libc::raise(SIGUSR1) };
 //!     let mut buff = [0];
 //!     read.read_exact(&mut buff)?;
 //!     println!("Happily terminating");

@@ -10,7 +10,7 @@ use std::sync::atomic::AtomicBool;
 use std::sync::Arc;
 
 use libc::{c_int, raise, sighandler_t, signal};
-use signal_hook::SIGTERM;
+use signal_hook::consts::SIGTERM;
 
 extern "C" fn handler(_: c_int) {}
 

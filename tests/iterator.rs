@@ -9,8 +9,8 @@ use std::sync::Arc;
 use std::thread::{self, JoinHandle};
 use std::time::Duration;
 
+use signal_hook::consts::{SIGUSR1, SIGUSR2};
 use signal_hook::iterator::{Handle, Signals};
-use signal_hook::{SIGUSR1, SIGUSR2};
 
 use serial_test::serial;
 

@@ -14,18 +14,18 @@
 //!
 //! use async_std::prelude::*;
 //!
-//! use signal_hook;
+//! use signal_hook::consts::signal::*;
 //! use signal_hook_async_std::Signals;
 //!
 //! async fn handle_signals(signals: Signals) {
 //!     let mut signals = signals.fuse();
 //!     while let Some(signal) = signals.next().await {
 //!         match signal {
-//!             signal_hook::SIGHUP => {
+//!             SIGHUP => {
 //!                 // Reload configuration
 //!                 // Reopen the log file
 //!             }
-//!             signal_hook::SIGTERM | signal_hook::SIGINT | signal_hook::SIGQUIT => {
+//!             SIGTERM | SIGINT | SIGQUIT => {
 //!                 // Shutdown the system;
 //!             },
 //!             _ => unreachable!(),
@@ -35,12 +35,7 @@
 //!
 //! #[async_std::main]
 //! async fn main() -> Result<(), Error> {
-//!     let signals = Signals::new(&[
-//!         signal_hook::SIGHUP,
-//!         signal_hook::SIGTERM,
-//!         signal_hook::SIGINT,
-//!         signal_hook::SIGQUIT,
-//!     ])?;
+//!     let signals = Signals::new(&[SIGHUP, SIGTERM, SIGINT, SIGQUIT])?;
 //!     let handle = signals.handle();
 //!
 //!     let signals_task = async_std::task::spawn(handle_signals(signals));

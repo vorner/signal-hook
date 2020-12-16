@@ -483,7 +483,9 @@ const FORBIDDEN_IMPL: &[c_int] = &[SIGKILL, SIGSTOP, SIGILL, SIGFPE, SIGSEGV];
 /// use std::process;
 ///
 /// fn main() -> Result<(), Error> {
-///     let signal = unsafe { signal_hook::register(signal_hook::SIGTERM, || process::abort()) }?;
+///     let signal = unsafe {
+///         signal_hook::register(signal_hook::consts::SIGTERM, || process::abort())
+///     }?;
 ///     // Stuff here...
 ///     signal_hook::unregister(signal); // Not really necessary.
 ///     Ok(())

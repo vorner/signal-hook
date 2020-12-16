@@ -176,13 +176,13 @@ impl Drop for Slot {
 /// # Examples
 ///
 /// ```rust
-/// # use signal_hook::SIGUSR1;
+/// # use signal_hook::consts::SIGUSR1;
 /// # use signal_hook::iterator::SignalsInfo;
 /// # use signal_hook::iterator::exfiltrator::origin::WithOrigin;
 /// #
 /// # fn main() -> Result<(), std::io::Error> {
 /// // Subscribe to SIGUSR1, with information about the process.
-/// let signals = SignalsInfo::<WithOrigin>::new(&[SIGUSR1])?;
+/// let mut signals = SignalsInfo::<WithOrigin>::new(&[SIGUSR1])?;
 ///
 /// // Send a signal to ourselves.
 /// let my_pid = unsafe { libc::getpid() };

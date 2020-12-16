@@ -100,6 +100,7 @@ macro_rules! implement_signals_with_pipe {
 /// # use mio_0_7 as mio;
 /// use std::io::Error;
 ///
+/// use signal_hook::consts::signal::*;
 /// use signal_hook_mio::v0_7::Signals;
 ///
 /// use mio::{Events, Poll, Interest, Token};
@@ -108,14 +109,14 @@ macro_rules! implement_signals_with_pipe {
 ///     let mut poll = Poll::new()?;
 ///
 ///     let mut signals = Signals::new(&[
-///         signal_hook::SIGTERM,
-/// #       signal_hook::SIGUSR1,
+///         SIGTERM,
+/// #       SIGUSR1,
 ///     ])?;
 ///
 ///     let signal_token = Token(0);
 ///
 ///     poll.registry().register(&mut signals, signal_token, Interest::READABLE)?;
-/// #   unsafe { libc::raise(signal_hook::SIGUSR1) }; // Just for terminating the example
+/// #   unsafe { libc::raise(SIGUSR1) }; // Just for terminating the example
 ///
 ///     let mut events = Events::with_capacity(10);
 ///     'outer: loop {
@@ -125,8 +126,8 @@ macro_rules! implement_signals_with_pipe {
 ///                 Token(0) => {
 ///                     for signal in signals.pending() {
 ///                         match signal {
-///                             signal_hook::SIGTERM => break 'outer,
-/// #                           signal_hook::SIGUSR1 => return Ok(()),
+///                             SIGTERM => break 'outer,
+/// #                           SIGUSR1 => return Ok(()),
 ///                             _ => unreachable!(),
 ///                         }
 ///                     }
@@ -183,6 +184,7 @@ pub mod v0_7 {
 /// # use mio_0_6 as mio;
 /// use std::io::Error;
 ///
+/// use signal_hook::consts::signal::*;
 /// use signal_hook_mio::v0_6::Signals;
 ///
 /// use mio::{Events, Poll, PollOpt, Ready, Token};
@@ -191,14 +193,14 @@ pub mod v0_7 {
 ///     let poll = Poll::new()?;
 ///
 ///     let mut signals = Signals::new(&[
-///         signal_hook::SIGTERM,
-/// #       signal_hook::SIGUSR1,
+///         SIGTERM,
+/// #       SIGUSR1,
 ///     ])?;
 ///
 ///     let signal_token = Token(0);
 ///
 ///     poll.register(&mut signals, signal_token, Ready::readable(), PollOpt::level())?;
-/// #   unsafe { libc::raise(signal_hook::SIGUSR1) }; // Just for terminating the example
+/// #   unsafe { libc::raise(SIGUSR1) }; // Just for terminating the example
 ///
 ///     let mut events = Events::with_capacity(10);
 ///     'outer: loop {
@@ -208,8 +210,8 @@ pub mod v0_7 {
 ///                 Token(0) => {
 ///                     for signal in signals.pending() {
 ///                         match signal {
-///                             signal_hook::SIGTERM => break 'outer,
-/// #                           signal_hook::SIGUSR1 => return Ok(()),
+///                             SIGTERM => break 'outer,
+/// #                           SIGUSR1 => return Ok(()),
 ///                             _ => unreachable!(),
 ///                         }
 ///                     }

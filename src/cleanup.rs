@@ -95,7 +95,8 @@ pub fn cleanup_raw(signal: c_int) -> sighandler_t {
 /// #
 /// # fn keep_processing() { std::thread::sleep(std::time::Duration::from_millis(50)); }
 /// # fn app_cleanup() {}
-/// use signal_hook::{cleanup, flag, SIGTERM};
+/// use signal_hook::{cleanup, flag};
+/// use signal_hook::consts::SIGTERM;
 ///
 /// fn main() -> Result<(), Error> {
 ///     let terminated = Arc::new(AtomicBool::new(false));
@@ -164,16 +165,14 @@ fn verify_signals_exist(_: &[c_int]) -> Result<(), Error> {
 /// # Examples
 ///
 /// ```rust
-/// # extern crate libc;
-/// # extern crate signal_hook;
-/// #
 /// # use std::io::Error;
 /// # use std::sync::atomic::{AtomicBool, Ordering};
 /// # use std::sync::Arc;
 /// #
 /// # fn keep_processing() { std::thread::sleep(std::time::Duration::from_millis(50)); }
 /// # fn app_cleanup() {}
-/// use signal_hook::{cleanup, flag, SIGINT, SIGTERM};
+/// use signal_hook::consts::{SIGINT, SIGTERM};
+/// use signal_hook::{cleanup, flag};
 ///
 /// fn main() -> Result<(), Error> {
 ///     let terminated = Arc::new(AtomicBool::new(false));

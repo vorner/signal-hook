@@ -84,6 +84,7 @@ macro_rules! implement_signals_with_pipe {
 /// # use tokio_0_1 as tokio;
 /// use std::io::Error;
 ///
+/// use signal_hook::consts::signal::*;
 /// use signal_hook_tokio::v0_1::Signals;
 /// use tokio::prelude::*;
 ///
@@ -94,8 +95,8 @@ macro_rules! implement_signals_with_pipe {
 ///
 /// fn main() -> Result<(), Error> {
 ///     let signals = Signals::new(&[
-///             signal_hook::SIGTERM,
-/// #           signal_hook::SIGUSR1,
+///             SIGTERM,
+/// #           SIGUSR1,
 ///         ])?
 ///         .map_err(|error| {
 ///             SignalResult::Err(error)
@@ -103,8 +104,8 @@ macro_rules! implement_signals_with_pipe {
 ///         .for_each(|sig| {
 ///             // Return an error to stop the for_each iteration.
 ///             match sig {
-///                 signal_hook::SIGTERM => return future::err(SignalResult::Shutdown),
-/// #               signal_hook::SIGUSR1 => return future::err(SignalResult::Shutdown),
+///                 SIGTERM => return future::err(SignalResult::Shutdown),
+/// #               SIGUSR1 => return future::err(SignalResult::Shutdown),
 ///                 _ => unreachable!(),
 ///             }
 ///         })
@@ -114,7 +115,7 @@ macro_rules! implement_signals_with_pipe {
 ///             }
 ///         });
 ///
-/// #   unsafe { libc::raise(signal_hook::SIGUSR1) };
+/// #   unsafe { libc::raise(SIGUSR1) };
 ///     tokio::run(signals);
 ///     Ok(())
 /// }
@@ -169,7 +170,7 @@ pub mod v0_1 {
 ///
 /// use std::io::Error;
 ///
-/// use signal_hook;
+/// use signal_hook::consts::signal::*;
 /// use signal_hook_tokio::v0_3::Signals;
 ///
 /// use futures::stream::StreamExt;
@@ -178,11 +179,11 @@ pub mod v0_1 {
 ///     let mut signals = signals.fuse();
 ///     while let Some(signal) = signals.next().await {
 ///         match signal {
-///             signal_hook::SIGHUP => {
+///             SIGHUP => {
 ///                 // Reload configuration
 ///                 // Reopen the log file
 ///             }
-///             signal_hook::SIGTERM | signal_hook::SIGINT | signal_hook::SIGQUIT => {
+///             SIGTERM | SIGINT | SIGQUIT => {
 ///                 // Shutdown the system;
 ///             },
 ///             _ => unreachable!(),
@@ -193,10 +194,10 @@ pub mod v0_1 {
 /// #[tokio::main]
 /// async fn main() -> Result<(), Error> {
 ///     let signals = Signals::new(&[
-///         signal_hook::SIGHUP,
-///         signal_hook::SIGTERM,
-///         signal_hook::SIGINT,
-///         signal_hook::SIGQUIT,
+///         SIGHUP,
+///         SIGTERM,
+///         SIGINT,
+///         SIGQUIT,
 ///     ])?;
 ///     let handle = signals.handle();
 ///

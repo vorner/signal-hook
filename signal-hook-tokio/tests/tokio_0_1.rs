@@ -4,6 +4,7 @@ use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 
+use signal_hook::consts::{SIGUSR1, SIGUSR2};
 use signal_hook_tokio::v0_1::Signals;
 use tokio_0_1::prelude::*;
 use tokio_0_1::timer::Interval;
@@ -17,16 +18,16 @@ fn send_sig(sig: libc::c_int) {
 #[test]
 #[serial]
 fn repeated() {
-    let signals = Signals::new(&[signal_hook::SIGUSR1])
+    let signals = Signals::new(&[SIGUSR1])
         .unwrap()
         .take(20)
         .map_err(|e| panic!("{}", e))
         .for_each(|sig| {
-            assert_eq!(sig, signal_hook::SIGUSR1);
-            send_sig(signal_hook::SIGUSR1);
+            assert_eq!(sig, SIGUSR1);
+            send_sig(SIGUSR1);
             Ok(())
         });
-    send_sig(signal_hook::SIGUSR1);
+    send_sig(SIGUSR1);
     tokio_0_1::run(signals);
 }
 
@@ -37,9 +38,9 @@ fn delayed() {
     const CNT: usize = 10;
     let cnt = Arc::new(AtomicUsize::new(0));
     let inc_cnt = Arc::clone(&cnt);
-    let signals = Signals::new(&[signal_hook::SIGUSR1, signal_hook::SIGUSR2])
+    let signals = Signals::new(&[SIGUSR1, SIGUSR2])
         .unwrap()
-        .filter(|sig| *sig == signal_hook::SIGUSR2)
+        .filter(|sig| *sig == SIGUSR2)
         .take(CNT as u64)
         .map_err(|e| panic!("{}", e))
         .for_each(move |_| {
@@ -49,7 +50,7 @@ fn delayed() {
     let senders = Interval::new(Instant::now(), Duration::from_millis(250))
         .map_err(|e| panic!("{}", e))
         .for_each(|_| {
-            send_sig(signal_hook::SIGUSR2);
+            send_sig(SIGUSR2);
             Ok(())
         });
     let both = signals.select(senders).map(|_| ()).map_err(|_| ());
@@ -61,7 +62,7 @@ fn delayed() {
 #[test]
 #[serial]
 fn close_signal_stream() {
-    let mut signals = Signals::new(&[signal_hook::SIGUSR1, signal_hook::SIGUSR2]).unwrap();
+    let mut signals = Signals::new(&[SIGUSR1, SIGUSR2]).unwrap();
     signals.handle().close();
 
     let async_result = signals.poll().unwrap();
