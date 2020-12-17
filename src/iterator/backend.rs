@@ -17,7 +17,7 @@
 //! Use the [`Signals`][crate::iterator::Signals] struct or one of the types
 //! contained in the adapter libraries instead.
 
-use std::borrow::Borrow;
+use std::borrow::{Borrow, BorrowMut};
 use std::fmt::{Debug, Formatter, Result as FmtResult};
 use std::io::Error;
 use std::mem::MaybeUninit;
@@ -416,19 +416,20 @@ pub enum PollResult<O> {
 }
 
 /// An infinite iterator of received signals.
-pub struct SignalIterator<R, E: Exfiltrator> {
-    signals: SignalDelivery<R, E>,
+pub struct SignalIterator<SD, E: Exfiltrator> {
+    signals: SD,
     iter: Pending<E>,
 }
 
-impl<R, E: Exfiltrator> SignalIterator<R, E>
-where
-    R: 'static + AsRawFd + Send + Sync,
-{
+impl<SD, E: Exfiltrator> SignalIterator<SD, E> {
     /// Create a new infinite iterator for signals registered with the passed
     /// in [`SignalDelivery`] instance.
-    pub fn new(mut signals: SignalDelivery<R, E>) -> Self {
-        let iter = signals.pending();
+    pub fn new<R>(mut signals: SD) -> Self
+    where
+        SD: BorrowMut<SignalDelivery<R, E>>,
+        R: 'static + AsRawFd + Send + Sync,
+    {
+        let iter = signals.borrow_mut().pending();
         Self { signals, iter }
     }
 
@@ -443,19 +444,21 @@ where
     ///
     /// If the iterator was closed by the [`close`][Handle::close] method of the associtated
     /// [`Handle`] this method will return [`PollResult::Closed`].
-    pub fn poll_signal<F>(&mut self, has_signals: &mut F) -> PollResult<E::Output>
+    pub fn poll_signal<R, F>(&mut self, has_signals: &mut F) -> PollResult<E::Output>
     where
+        SD: BorrowMut<SignalDelivery<R, E>>,
+        R: 'static + AsRawFd + Send + Sync,
         F: FnMut(&mut R) -> Result<bool, Error>,
     {
         // The loop is necessary because it is possible that a signal was already consumed
         // by a previous pending iterator due to the asynchronous nature of signals and
         // always moving to the end of the iterator before calling has_more.
-        while !self.signals.handle.is_closed() {
+        while !self.signals.borrow_mut().handle.is_closed() {
             if let Some(result) = self.iter.next() {
                 return PollResult::Signal(result);
             }
 
-            match self.signals.poll_pending(has_signals) {
+            match self.signals.borrow_mut().poll_pending(has_signals) {
                 Ok(Some(pending)) => self.iter = pending,
                 Ok(None) => return PollResult::Pending,
                 Err(err) => return PollResult::Err(err),
@@ -469,13 +472,19 @@ where
     ///
     /// This can be used to add further signals or terminate the whole
     /// signal iteration using the [`close`][Handle::close] method.
-    pub fn handle(&self) -> Handle {
-        self.signals.handle()
-    }
-
-    /// Consume this iterator and return the inner
-    /// [`SignalDelivery`] instance.
-    pub fn into_inner(self) -> SignalDelivery<R, E> {
-        self.signals
+    pub fn handle<R>(&self) -> Handle
+    where
+        SD: Borrow<SignalDelivery<R, E>>,
+        R: 'static + AsRawFd + Send + Sync,
+    {
+        self.signals.borrow().handle()
     }
 }
+
+/// A signal iterator which consumes a [`SignalDelivery`] instance and takes
+/// ownership of it.
+pub type OwningSignalIterator<R, E> = SignalIterator<SignalDelivery<R, E>, E>;
+
+/// A signal iterator which takes a mutable reference to a [`SignalDelivery`]
+/// instance.
+pub type RefSignalIterator<'a, R, E> = SignalIterator<&'a mut SignalDelivery<R, E>, E>;
