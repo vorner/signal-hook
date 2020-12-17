@@ -1,3 +1,6 @@
+* The signal-hook-async-std no longer depends on `futures`.
+* The forever iterator no longer consumes.
+
 # 0.2.2
 
 * Extractor for the origin of a signal (PID, UID, what caused it).
