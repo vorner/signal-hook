@@ -80,6 +80,7 @@
 //! use std::time::Duration;
 //!
 //! use signal_hook::consts::signal::*;
+//! use signal_hook::low_level::raise;
 //!
 //! fn main() -> Result<(), Error> {
 //!     let got = Arc::new(AtomicBool::new(false));
@@ -87,12 +88,10 @@
 //!     signal_hook::flag::register(SIGUSR1, Arc::clone(&got))?;
 //! #   #[cfg(windows)]
 //! #   signal_hook::flag::register(SIGTERM, Arc::clone(&got))?;
-//!     unsafe {
-//! #       #[cfg(not(windows))]
-//!         libc::raise(SIGUSR1);
-//! #       #[cfg(windows)]
-//! #       libc::raise(SIGTERM);
-//!     }
+//! #   #[cfg(not(windows))]
+//!     raise(SIGUSR1).unwrap();
+//! #   #[cfg(windows)]
+//! #   raise(SIGTERM).unwrap();
 //!     // A sleep here, because it could run the signal handler in another thread and we may not
 //!     // see the flag right away. This is still a hack and not guaranteed to work, it is just an
 //!     // example!
@@ -169,12 +168,11 @@ mod tests {
     use crate::consts::signal::*;
 
     fn self_signal() {
-        unsafe {
-            #[cfg(not(windows))]
-            libc::raise(SIGUSR1);
-            #[cfg(windows)]
-            libc::raise(SIGTERM);
-        }
+        #[cfg(not(windows))]
+        const SIG: c_int = SIGUSR1;
+        #[cfg(windows)]
+        const SIG: c_int = SIGTERM;
+        crate::low_level::raise(SIG).unwrap();
     }
 
     fn wait_flag(flag: &AtomicBool) -> bool {

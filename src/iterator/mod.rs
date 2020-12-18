@@ -33,7 +33,7 @@
 //! #       SIGUSR1,
 //!     ])?;
 //! #   // A trick to terminate the example when run as doc-test. Not part of the real code.
-//! #   unsafe { libc::raise(SIGUSR1) };
+//! #   signal_hook::low_level::raise(SIGUSR1).unwrap();
 //!     'outer: loop {
 //!         // Pick up signals that arrived since last time
 //!         for signal in signals.pending() {

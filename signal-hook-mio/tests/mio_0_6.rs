@@ -7,6 +7,7 @@ use std::time::Duration;
 
 use mio_0_6::{Events, Poll, PollOpt, Ready, Token};
 use signal_hook::consts::{SIGUSR1, SIGUSR2};
+use signal_hook::low_level::raise;
 use signal_hook_mio::v0_6::Signals;
 
 use serial_test::serial;
@@ -28,7 +29,7 @@ fn mio_wakeup() {
         .unwrap();
     assert!(events.is_empty());
 
-    unsafe { libc::raise(SIGUSR1) };
+    raise(SIGUSR1).unwrap();
     poll.poll(&mut events, Some(Duration::from_secs(10)))
         .unwrap();
     let event = events.iter().next().unwrap();
@@ -54,10 +55,8 @@ fn mio_multiple_signals() {
 
     let mut events = Events::with_capacity(10);
 
-    unsafe {
-        libc::raise(SIGUSR1);
-        libc::raise(SIGUSR2);
-    };
+    raise(SIGUSR1).unwrap();
+    raise(SIGUSR2).unwrap();
 
     poll.poll(&mut events, Some(Duration::from_secs(10)))
         .unwrap();
@@ -94,13 +93,13 @@ fn mio_parallel_multiple() {
         for _ in 0..10 {
             // Wait some time to allow main thread to poll
             thread::sleep(Duration::from_millis(25));
-            unsafe { libc::raise(SIGUSR1) };
+            raise(SIGUSR1).unwrap();
         }
         done.store(true, Ordering::SeqCst);
 
         // Raise a final signal so the main thread wakes up
         // if it already called poll.
-        unsafe { libc::raise(SIGUSR1) };
+        raise(SIGUSR1).unwrap();
     });
 
     while !thread_done.load(Ordering::SeqCst) {

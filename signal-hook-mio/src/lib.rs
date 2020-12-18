@@ -116,7 +116,7 @@ macro_rules! implement_signals_with_pipe {
 ///     let signal_token = Token(0);
 ///
 ///     poll.registry().register(&mut signals, signal_token, Interest::READABLE)?;
-/// #   unsafe { libc::raise(SIGUSR1) }; // Just for terminating the example
+/// #   signal_hook::low_level::raise(SIGUSR1).unwrap(); // Just for terminating the example
 ///
 ///     let mut events = Events::with_capacity(10);
 ///     'outer: loop {
@@ -200,7 +200,7 @@ pub mod v0_7 {
 ///     let signal_token = Token(0);
 ///
 ///     poll.register(&mut signals, signal_token, Ready::readable(), PollOpt::level())?;
-/// #   unsafe { libc::raise(SIGUSR1) }; // Just for terminating the example
+/// #   signal_hook::low_level::raise(SIGUSR1).unwrap(); // Just for terminating the example
 ///
 ///     let mut events = Events::with_capacity(10);
 ///     'outer: loop {

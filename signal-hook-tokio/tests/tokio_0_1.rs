@@ -5,15 +5,12 @@ use std::sync::Arc;
 use std::time::{Duration, Instant};
 
 use signal_hook::consts::{SIGUSR1, SIGUSR2};
+use signal_hook::low_level::raise;
 use signal_hook_tokio::v0_1::Signals;
 use tokio_0_1::prelude::*;
 use tokio_0_1::timer::Interval;
 
 use serial_test::serial;
-
-fn send_sig(sig: libc::c_int) {
-    unsafe { libc::raise(sig) };
-}
 
 #[test]
 #[serial]
@@ -24,10 +21,10 @@ fn repeated() {
         .map_err(|e| panic!("{}", e))
         .for_each(|sig| {
             assert_eq!(sig, SIGUSR1);
-            send_sig(SIGUSR1);
+            raise(SIGUSR1).unwrap();
             Ok(())
         });
-    send_sig(SIGUSR1);
+    raise(SIGUSR1).unwrap();
     tokio_0_1::run(signals);
 }
 
@@ -50,7 +47,7 @@ fn delayed() {
     let senders = Interval::new(Instant::now(), Duration::from_millis(250))
         .map_err(|e| panic!("{}", e))
         .for_each(|_| {
-            send_sig(SIGUSR2);
+            raise(SIGUSR2).unwrap();
             Ok(())
         });
     let both = signals.select(senders).map(|_| ()).map_err(|_| ());

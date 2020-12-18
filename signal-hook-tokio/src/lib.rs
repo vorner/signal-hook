@@ -115,7 +115,7 @@ macro_rules! implement_signals_with_pipe {
 ///             }
 ///         });
 ///
-/// #   unsafe { libc::raise(SIGUSR1) };
+/// #   signal_hook::low_level::raise(SIGUSR1).unwrap();
 ///     tokio::run(signals);
 ///     Ok(())
 /// }

@@ -61,13 +61,13 @@
 //! use std::os::unix::net::UnixStream;
 //!
 //! use signal_hook::consts::SIGUSR1;
-//! use signal_hook::low_level::pipe;
+//! use signal_hook::low_level::{pipe, raise};
 //!
 //! fn main() -> Result<(), Error> {
 //!     let (mut read, write) = UnixStream::pair()?;
 //!     pipe::register(SIGUSR1, write)?;
 //!     // This will write into the pipe write end through the signal handler
-//!     unsafe { libc::raise(SIGUSR1) };
+//!     raise(SIGUSR1).unwrap();
 //!     let mut buff = [0];
 //!     read.read_exact(&mut buff)?;
 //!     println!("Happily terminating");
@@ -214,7 +214,7 @@ mod tests {
     // Note: multiple tests share the SIGUSR1 signal. This is fine, we only need to know the signal
     // arrives. It's OK to arrive multiple times, from multiple tests.
     fn wakeup() {
-        unsafe { assert_eq!(0, libc::raise(libc::SIGUSR1)) }
+        crate::low_level::raise(libc::SIGUSR1).unwrap();
     }
 
     #[test]
