@@ -152,12 +152,12 @@ pub fn register(signal: c_int, flag: Arc<AtomicBool>) -> Result<SigId, Error> {
     // * Signals should not come very often, so the performance does not really matter.
     // * We promise the order of actions, but setting different atomics with Relaxed or similar
     //   would not guarantee the effective order.
-    unsafe { crate::register(signal, move || flag.store(true, Ordering::SeqCst)) }
+    unsafe { crate::low_level::register(signal, move || flag.store(true, Ordering::SeqCst)) }
 }
 
 /// Registers an action to set the flag to the given value whenever the signal arrives.
 pub fn register_usize(signal: c_int, flag: Arc<AtomicUsize>, value: usize) -> Result<SigId, Error> {
-    unsafe { crate::register(signal, move || flag.store(value, Ordering::SeqCst)) }
+    unsafe { crate::low_level::register(signal, move || flag.store(value, Ordering::SeqCst)) }
 }
 
 #[cfg(test)]
@@ -202,7 +202,7 @@ mod tests {
         self_signal();
         assert!(wait_flag(&flag));
         // But stops working after it is unregistered.
-        assert!(crate::unregister(signal));
+        assert!(crate::low_level::unregister(signal));
         flag.store(false, Ordering::Relaxed);
         self_signal();
         assert!(!wait_flag(&flag));

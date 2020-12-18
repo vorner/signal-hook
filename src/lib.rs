@@ -170,23 +170,15 @@
 //!
 //! Feel free to open a pull requests if you want to add support for runtimes not mentioned above.
 
-extern crate libc;
-extern crate signal_hook_registry;
-
-#[cfg(feature = "channel")]
-pub mod channel;
-pub mod cleanup;
 pub mod flag;
 #[cfg(all(not(windows), feature = "iterator"))]
 pub mod iterator;
-#[cfg(not(windows))]
-pub mod pipe;
+pub mod low_level;
 
 /// The low-level constants.
 ///
 /// Like the signal numbers.
 pub mod consts {
-
     /// The signal constants.
     ///
     /// Can be mass-imported by `use signal_hook::consts::signal::*`, without polluting the
@@ -218,4 +210,4 @@ pub mod consts {
     pub use signal_hook_registry::FORBIDDEN;
 }
 
-pub use signal_hook_registry::{register, unregister, SigId};
+pub use signal_hook_registry::SigId;

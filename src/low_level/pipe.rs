@@ -15,7 +15,7 @@
 //! If you want to integrate with some asynchronous library, plugging streams from `mio-uds` or
 //! `tokio-uds` libraries should work.
 //!
-//! If it looks too low-level for your needs, the [`iterator`](../iterator/) module contains some
+//! If it looks too low-level for your needs, the [`iterator`][crate::iterator] module contains some
 //! higher-lever interface that also uses a self-pipe pattern under the hood.
 //!
 //! # Correct order of handling
@@ -61,10 +61,11 @@
 //! use std::os::unix::net::UnixStream;
 //!
 //! use signal_hook::consts::SIGUSR1;
+//! use signal_hook::low_level::pipe;
 //!
 //! fn main() -> Result<(), Error> {
 //!     let (mut read, write) = UnixStream::pair()?;
-//!     signal_hook::pipe::register(SIGUSR1, write)?;
+//!     pipe::register(SIGUSR1, write)?;
 //!     // This will write into the pipe write end through the signal handler
 //!     unsafe { libc::raise(SIGUSR1) };
 //!     let mut buff = [0];
@@ -185,7 +186,7 @@ pub fn register_raw(signal: c_int, pipe: RawFd) -> Result<SigId, Error> {
         }
     };
     let action = move || fd.wake();
-    unsafe { crate::register(signal, action) }
+    unsafe { super::register(signal, action) }
 }
 
 /// Registers a write to a self-pipe whenever there's the signal.

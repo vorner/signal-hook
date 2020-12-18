@@ -22,7 +22,7 @@ use libc::{c_int, pid_t, siginfo_t, uid_t};
 use signal_hook_sys::internal::{Cause as ICause, SigInfo};
 
 use super::sealed::Exfiltrator;
-use crate::channel::Channel;
+use crate::low_level::channel::Channel;
 
 /// Information about process, as presented in the signal metadata.
 #[derive(Copy, Clone, Debug, Eq, PartialEq)]

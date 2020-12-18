@@ -477,17 +477,17 @@ const FORBIDDEN_IMPL: &[c_int] = &[SIGKILL, SIGSTOP, SIGILL, SIGFPE, SIGSEGV];
 /// # Examples
 ///
 /// ```rust
-/// extern crate signal_hook;
+/// extern crate signal_hook_registry;
 ///
 /// use std::io::Error;
 /// use std::process;
 ///
 /// fn main() -> Result<(), Error> {
 ///     let signal = unsafe {
-///         signal_hook::register(signal_hook::consts::SIGTERM, || process::abort())
+///         signal_hook_registry::register(signal_hook::consts::SIGTERM, || process::abort())
 ///     }?;
 ///     // Stuff here...
-///     signal_hook::unregister(signal); // Not really necessary.
+///     signal_hook_registry::unregister(signal); // Not really necessary.
 ///     Ok(())
 /// }
 /// ```
