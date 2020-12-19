@@ -159,6 +159,35 @@ pub fn register_usize(signal: c_int, flag: Arc<AtomicUsize>, value: usize) -> Re
     unsafe { crate::low_level::register(signal, move || flag.store(value, Ordering::SeqCst)) }
 }
 
+/// Terminate the application on a signal if the given condition is true.
+///
+/// This can be used for different use cases. One of them (with the condition being always true) is
+/// just unconditionally terminate on the given signal.
+///
+/// Another is being able to turn on and off the behaviour by the shared flag.
+///
+/// The last one is handling double CTRL+C ‒ if the user presses CTRL+C, we would like to start a
+/// graceful shutdown. But if anything ever gets stuck in the shutdown, second CTRL+C (or other
+/// such termination signal) should terminate the application without further delay.
+///
+/// To do that, one can combine this with [`register`]. On the first run, the flag is `false` and
+/// this doesn't terminate. But then the flag is set to true during the first run and „arms“ the
+/// shutdown on the second run. Note that it matters in which order the actions are registered (the
+/// shutdown must go first). And yes, this also allows asking the user „Do you want to terminate“
+/// and disarming the abrupt shutdown if the user answers „No“.
+pub fn register_conditional_shutdown(
+    signal: c_int,
+    status: c_int,
+    condition: Arc<AtomicBool>,
+) -> Result<SigId, Error> {
+    let action = move || {
+        if condition.load(Ordering::SeqCst) {
+            crate::low_level::exit(status);
+        }
+    };
+    unsafe { crate::low_level::register(signal, action) }
+}
+
 #[cfg(test)]
 mod tests {
     use std::sync::atomic;
@@ -207,4 +236,6 @@ mod tests {
         // And the unregistration actually dropped its copy of the Arc
         assert_eq!(1, Arc::strong_count(&flag));
     }
+
+    // The shutdown is tested in tests/shutdown.rs
 }

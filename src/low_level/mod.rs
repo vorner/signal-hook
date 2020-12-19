@@ -35,3 +35,17 @@ pub fn abort() -> ! {
         libc::abort();
     }
 }
+
+/// A bare libc exit.
+///
+/// Unlike the [std::process::exit], this one is guaranteed to contain no additions or wrappers and
+/// therefore is async-signal-safe. You can use this to terminate the application from within a
+/// signal handler.
+///
+/// Also, see [`register_conditional_shutdown`][crate::flag::register_conditional_shutdown].
+pub fn exit(status: c_int) -> ! {
+    unsafe {
+        // Yes, the one with underscore. That one doesn't call the at-exit hooks.
+        libc::_exit(status);
+    }
+}

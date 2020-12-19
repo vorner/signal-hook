@@ -2,6 +2,10 @@
 //!
 //! As a separate integration level test, so it doesn't clash with other tests on the signals.
 
+// The unregister_signal itself is deprecated. But we still want to test it, so it's not deprecated
+// and broken at the same time.
+#![allow(deprecated)]
+
 extern crate libc;
 extern crate signal_hook_registry;
 
