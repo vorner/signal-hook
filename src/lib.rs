@@ -17,7 +17,7 @@
 //! Unix signals are inherently hard to handle correctly, for several reasons:
 //!
 //! * They are a global resource. If a library wants to set its own signal handlers, it risks
-//!   disturbing some other library. It is possible to chain the previous signal handler, but then
+//!   disrupting some other library. It is possible to chain the previous signal handler, but then
 //!   it is impossible to remove the old signal handlers from the chains in any practical manner.
 //! * They can be called from whatever thread, requiring synchronization. Also, as they can
 //!   interrupt a thread at any time, making most handling race-prone.
@@ -25,70 +25,96 @@
 //!   limited to very few of them. To highlight, mutexes (or other locking mechanisms) and memory
 //!   allocation and deallocation is *not* allowed.
 //!
-//! # The easy way
+//! # The goal of the library
 //!
-//! If you are interested in the easiest way to handle signals, head over to the
-//! [`Signals`][crate::iterator] iterator. It is one of the abstractions provided by this library
-//! and probably the easiest one to use and with the least amount of catches.
+//! The aim is to subscriptions to signals a „structured“ resource, in a similar way memory
+//! allocation is ‒ parts of the program can independently subscribe and it's the same part of the
+//! program that can give them up, independently of what the other parts do. Therefore, it is
+//! possible to register multiple actions to the same signal.
 //!
-//! Note that they still are some catches, most importantly that both the OS and the library may
-//! collate multiple instances of the same signal into one (if you're not consuming fast enough).
+//! Another goal is to shield applications away from differences between platforms. Various Unix
+//! systems have little quirks and differences that need to be worked around and that's not
+//! something every application should be dealing with. We even try to provide some support for
+//! Windows, but we lack the expertise in that area, so that one is not complete and is a bit rough
+//! (if you know how it works there and are willing to either contribute the code or consult,
+//! please get in touch).
 //!
-//! If you want an asynchronous version, see below for extension crates giving you that support.
+//! Furthermore, it provides implementation of certain common signal-handling patterns, usable from
+//! safe Rust, without the application author needing to learn about *all* the traps.
 //!
-//! Otherwise, read on for the full details.
+//! Note that despite everything, there are still some quirks around signal handling that are not
+//! possible to paper over and need to be considered. Also, there are some signal use cases that
+//! are inherently unsafe and they are not covered by this crate.
 //!
-//! # Details
+//! # Anatomy of the crate
 //!
-//! This library aims to solve some of the problems. It provides a global registry of actions
-//! performed on arrival of signals. It is possible to register multiple actions for the same
-//! signal and it is possible to remove the actions later on. If there was a previous signal
-//! handler when the first action for a signal is registered, it is chained (but the original one
-//! can't be removed).
+//! The crate is split into several modules.
 //!
-//! The main function of the library is [`register`](fn.register.html).
+//! The easiest way to handle signals is using the [`Signals`][crate::iterator::Signals] iterator
+//! thing. It can register for a set of signals and produce them one by one, in a blocking manner.
+//! You can reserve a thread for handling them as they come. If you want something asynchronous,
+//! there are adaptor crates for the most common asynchronous runtimes. The module also contains
+//! ways to build iterators that produce a bit more information that just the signal number.
 //!
-//! It also offers several common actions one might want to register, implemented in the correct
-//! way. They are scattered through submodules and have the same limitations and characteristics as
-//! the [`register`](fn.register.html) function. Generally, they work to postpone the action taken
-//! outside of the signal handler, where the full freedom and power of rust is available.
+//! The [`flag`] module contains routines to set a flag based on incoming signals and to do
+//! certain actions inside the signal handlers based on the flags (the flags can also be
+//! manipulated by the rest of the application). This allows building things like checking if a
+//! signal happened on each loop iteration or making sure application shuts down on the second
+//! CTRL+C if it got stuck in graceful shutdown requested by the first.
 //!
-//! Unlike other Rust libraries for signal handling, this should be flexible enough to handle all
-//! the common and useful patterns.
+//! The [`consts`] module contains some constants, most importantly the signal numbers themselves
+//! (these are just re-exports from [`libc`] and if your OS has some extra ones, you can use them
+//! too, this is just for convenience).
 //!
-//! The library avoids all the newer fancy signal-handling routines. These generally have two
-//! downsides:
+//! And last, there is the [`low_level`] module. It contains routines to directly register and
+//! unregister arbitrary actions. Some of the patters in the above modules return a [`SigId`],
+//! which can be used with the [`low_level::unregister`] to remove the action. There are also some
+//! other utilities that are more suited to build other abstractions with than to use directly.
 //!
-//! * They are not fully portable, therefore the library would have to contain *both* the
-//!   implementation using the basic routines and the fancy ones. As signal handling is not on the
-//!   hot path of most programs, this would not bring any actual benefit.
-//! * The other routines require that the given signal is masked in all application's threads. As
-//!   the signals are not masked by default and a new thread inherits the signal mask of its
-//!   parent, it is possible to guarantee such global mask by masking them before any threads
-//!   start. While this is possible for an application developer to do, it is not possible for a
-//!   a library.
+//! Certain parts of the library can be enabled or disabled with use flags:
 //!
-//! # Warning
+//! * `channel`: The [low_level::channel] module (on by default).
+//! * `iterator`: The [iterator] module (on by default).
+//! * `extended-sig-info`: Support for providing more information in the iterators or from the
+//!   async adaptor crates. This is off by default.
 //!
-//! Even with this library, you should thread with care. It does not eliminate all the problems
-//! mentioned above.
+//! # Limitations
 //!
-//! Also, note that the OS may collate multiple instances of the same signal into just one call of
-//! the signal handler. Furthermore, some abstractions implemented here also naturally collate
-//! multiple instances of the same signal. The general guarantee is, if there was at least one
-//! signal of the given number delivered, an action will be taken, but it is not specified how many
-//! times ‒ signals work mostly as kind of „wake up now“ nudge, if the application is slow to wake
-//! up, it may be nudged multiple times before it does so.
-//!
-//! # Signal limitations
-//!
-//! OS limits still apply ‒ it is not possible to redefine certain signals (eg. `SIGKILL` or
-//! `SIGSTOP`) and it is probably a *very* stupid idea to touch certain other ones (`SIGSEGV`,
-//! `SIGFPE`, `SIGILL`). Therefore, this library will panic if any attempt at manipulating these is
-//! made. There are some use cases for redefining the latter ones, but these are not well served by
-//! this library and you really *really* have to know what you're doing and are generally on your
-//! own doing that. You can, however, have a look at the very low level API in
-//! [`signal_hook_registry`].
+//! * OS limitations still apply. Certain signals are not possible to override or subscribe to ‒
+//!   `SIGKILL` or `SIGSTOP`.
+//! * Overriding some others is probably a very stupid idea (or very unusual needs) ‒ handling eg.
+//!   `SIGSEGV` is not something done lightly. For that reason, the crate will panic in case
+//!   registering of these is attempted (see [`FORBIDDEN`][crate::consts::FORBIDDEN]. If you still
+//!   need to do so, you can find such APIs in the `signal-hook-registry` backend crate, but
+//!   additional care must be taken.
+//! * Interaction with other signal-handling libraries is limited. If signal-hook finds an existing
+//!   handler present, it chain-calls it from the signal it installs and assumes other libraries
+//!   would do the same, but that's everything that can be done to make it work with libraries not
+//!   based on [`signal-hook-registry`](https://lib.rs/signal-hook-registry)
+//!   (the backend of this crate).
+//! * The above chaining contains a race condition in multi-threaded programs, where the previous
+//!   handler might not get called if it is received during the registration process. This is
+//!   handled (at least on non-windows platforms) on the same thread where the registration
+//!   happens, therefore it is advised to register at least one action for each signal of interest
+//!   early, before any additional threads are started. Registering any additional (or removing and
+//!   registering again) action on the same signal is without the race condition.
+//! * Once at least one action is registered for a signal, the default action is replaced (this is
+//!   how signals work in the OS). Even if all actions of that signal are removed, `signal-hook`
+//!   does not restore the default handler (such behaviour would be at times inconsistent with
+//!   making the actions independent and there's no reasonable way to do so in a race-free way in a
+//!   multi-threaded program while also dealing with signal handlers registered with other
+//!   libraries). It is, however, possible to *emulate* the default handler ‒ there are only 4
+//!   default handlers:
+//!   - Ignore. This is easy to emulate.
+//!   - Abort. Depending on if you call it from within a signal handler of from outside, the
+//!     [`low_level::abort`] or [`std::process::abort`] can be used.
+//!   - Terminate. This can be done with `exit` ([`low_level::exit`] or [`std::process::exit`]).
+//!   - Stop. It is possible to [`raise`][low_level::raise] the [`SIGSTOP`][consts::SIGSTOP] signal.
+//!     That one can't be replaced and always stops the application.
+//! * Many of the patterns here can collate multiple instances of the same signal into fewer
+//!   instances, if the application doesn't consume them fast enough. This is consistent with what
+//!   the kernel does if the application doesn't keep up with them, so it is something one needs to
+//!   deal with anyway.
 //!
 //! # Signal masks
 //!
@@ -119,7 +145,7 @@
 //! This crate includes a limited support for Windows, based on `signal`/`raise` in the CRT.
 //! There are differences in both API and behavior:
 //!
-//! - `iterator` and `pipe` are not yet implemented.
+//! - Many parts of the library are not available there.
 //! - We have only a few signals: `SIGABRT`, `SIGABRT_COMPAT`, `SIGBREAK`,
 //!   `SIGFPE`, `SIGILL`, `SIGINT`, `SIGSEGV` and `SIGTERM`.
 //! - Due to lack of signal blocking, there's a race condition.
@@ -139,6 +165,8 @@
 //!
 //! # Examples
 //!
+//! ## Using a flag to terminate a loop-based application
+//!
 //! ```rust
 //! use std::io::Error;
 //! use std::sync::Arc;
@@ -157,6 +185,121 @@
 //!     }
 //!     Ok(())
 //! }
+//! ```
+//!
+//! ## A complex signal handling with a background thread
+//!
+//! This also handles the double CTRL+C situation (eg. the second CTRL+C kills) and resetting the
+//! terminal on `SIGTSTP` (CTRL+Z, curses-based applications should do something like this).
+//!
+//! ```rust
+//! # #[cfg(feature = "extended-siginfo")] pub mod test {
+//! use std::io::Error;
+//! use std::sync::Arc;
+//! use std::sync::atomic::AtomicBool;
+//!
+//! use signal_hook::consts::signal::*;
+//! use signal_hook::consts::TERM_SIGNALS;
+//! use signal_hook::flag;
+//! // A friend of the Signals iterator, but can be customized by what we want yielded about each
+//! // signal.
+//! use signal_hook::iterator::SignalsInfo;
+//! use signal_hook::iterator::exfiltrator::WithOrigin;
+//! use signal_hook::low_level;
+//!
+//! # struct App;
+//! # impl App {
+//! # fn run_background() -> Self { Self }
+//! # fn wait_for_stop(self) {}
+//! # fn restore_term(&self) {}
+//! # fn claim_term(&self) {}
+//! # fn resize_term(&self) {}
+//! # fn reload_config(&self) {}
+//! # fn print_stats(&self) {}
+//! # }
+//!
+//! # pub
+//! fn main() -> Result<(), Error> {
+//!     // Make sure double CTRL+C and similar kills
+//!     let term_now = Arc::new(AtomicBool::new(false));
+//!     for sig in TERM_SIGNALS {
+//!         // When terminated by a second term signal, exit with exit code 1.
+//!         // This will do nothing the first time (because term_now is false).
+//!         flag::register_conditional_shutdown(*sig, 1, Arc::clone(&term_now))?;
+//!         // But this will "arm" the above for the second time, by setting it to true.
+//!         // The order of registering these is important, if you put this one first, it will
+//!         // first arm and then terminate ‒ all in the first round.
+//!         flag::register(*sig, Arc::clone(&term_now))?;
+//!     }
+//!
+//!     // Subscribe to all these signals with information about where they come from. We use the
+//!     // extra info only for logging in this example (it is not available on all the OSes or at
+//!     // all the occasions anyway, it may return `Unknown`).
+//!     let mut sigs = vec![
+//!         // Some terminal handling
+//!         SIGTSTP, SIGCONT, SIGWINCH,
+//!         // Reload of configuration for daemons ‒ um, is this example for a TUI app or a daemon
+//!         // O:-)? You choose...
+//!         SIGHUP,
+//!         // Application-specific action, to print some statistics.
+//!         SIGUSR1,
+//!     ];
+//!     sigs.extend(TERM_SIGNALS);
+//!     let mut signals = SignalsInfo::<WithOrigin>::new(&sigs)?;
+//! #   low_level::raise(SIGTERM)?; // Trick to terminate the example
+//!
+//!     // This is the actual application that'll start in its own thread. We'll control it from
+//!     // this thread based on the signals, but it keeps running.
+//!     // This is called after all the signals got registered, to avoid the short race condition
+//!     // in the first registration of each signal in multi-threaded programs.
+//!     let app = App::run_background();
+//!
+//!     // Consume all the incoming signals. This happens in "normal" Rust thread, not in the
+//!     // signal handlers. This means that we are allowed to do whatever we like in here, without
+//!     // restrictions, but it also means the kernel believes the signal already got delivered, we
+//!     // handle them in delayed manner. This is in contrast with eg the above
+//!     // `register_conditional_shutdown` where the shutdown happens *inside* the handler.
+//!     let mut has_terminal = true;
+//!     for info in &mut signals {
+//!         // Will print info about signal + where it comes from.
+//!         eprintln!("Received a signal {:?}", info);
+//!         match info.signal {
+//!             SIGTSTP => {
+//!                 // Restore the terminal to non-TUI mode
+//!                 if has_terminal {
+//!                     app.restore_term();
+//!                     has_terminal = false;
+//!                     // And actually stop ourselves, by a little trick.
+//!                     low_level::raise(SIGSTOP)?;
+//!                 }
+//!             }
+//!             SIGCONT => {
+//!                 if !has_terminal {
+//!                     app.claim_term();
+//!                     has_terminal = true;
+//!                 }
+//!             }
+//!             SIGWINCH => app.resize_term(),
+//!             SIGHUP => app.reload_config(),
+//!             SIGUSR1 => app.print_stats(),
+//!             term_sig => { // These are all the ones left
+//!                 eprintln!("Terminating");
+//!                 assert!(TERM_SIGNALS.contains(&term_sig));
+//!                 break;
+//!             }
+//!         }
+//!     }
+//!
+//!     // If during this another termination signal comes, the trick at the top would kick in and
+//!     // terminate early. But if it doesn't, the application shuts down gracefully.
+//!     app.wait_for_stop();
+//!
+//!     Ok(())
+//! }
+//! # }
+//! # fn main() {
+//! # #[cfg(feature = "extended-siginfo")] test::main().unwrap();
+//! # }
 //! ```
 //!
 //! # Asynchronous runtime support
@@ -179,6 +322,9 @@ pub mod low_level;
 ///
 /// Like the signal numbers.
 pub mod consts {
+
+    use libc::c_int;
+
     /// The signal constants.
     ///
     /// Can be mass-imported by `use signal_hook::consts::signal::*`, without polluting the
@@ -208,6 +354,14 @@ pub mod consts {
     pub use self::signal::*;
 
     pub use signal_hook_registry::FORBIDDEN;
+
+    /// Various signals commonly requesting shutdown of an application.
+    #[cfg(not(windows))]
+    pub const TERM_SIGNALS: &[c_int] = &[SIGTERM, SIGQUIT, SIGINT];
+
+    /// Various signals commonly requesting shutdown of an application.
+    #[cfg(windows)]
+    pub const TERM_SIGNALS: &[c_int] = &[SIGTERM, SIGINT];
 }
 
 pub use signal_hook_registry::SigId;
