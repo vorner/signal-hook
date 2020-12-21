@@ -903,17 +903,17 @@ dependencies = [
 
 [[package]]
 name = "signal-hook"
-version = "0.2.2"
+version = "0.3.0"
 dependencies = [
  "libc",
  "serial_test",
- "signal-hook-registry 1.2.2",
+ "signal-hook-registry 1.3.0",
  "signal-hook-sys",
 ]
 
 [[package]]
 name = "signal-hook-async-std"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "async-std",
  "libc",
@@ -923,21 +923,13 @@ dependencies = [
 
 [[package]]
 name = "signal-hook-mio"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "libc",
  "mio 0.6.22",
  "mio 0.7.6",
  "mio-uds",
  "serial_test",
- "signal-hook",
-]
-
-[[package]]
-name = "signal-hook-registry"
-version = "1.2.2"
-dependencies = [
- "libc",
  "signal-hook",
 ]
 
@@ -951,6 +943,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "signal-hook-registry"
+version = "1.3.0"
+dependencies = [
+ "libc",
+ "signal-hook",
+]
+
+[[package]]
 name = "signal-hook-sys"
 version = "0.1.0"
 dependencies = [
@@ -960,7 +960,7 @@ dependencies = [
 
 [[package]]
 name = "signal-hook-tokio"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "futures 0.1.30",
  "futures 0.3.8",
@@ -1055,7 +1055,7 @@ dependencies = [
  "num_cpus",
  "parking_lot 0.11.1",
  "pin-project-lite 0.2.0",
- "signal-hook-registry 1.2.2 (registry+https://github.com/rust-lang/crates.io-index)",
+ "signal-hook-registry 1.2.2",
  "slab",
  "tokio-macros",
  "winapi 0.3.9",

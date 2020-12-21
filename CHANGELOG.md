@@ -1,5 +1,21 @@
-* The signal-hook-async-std no longer depends on `futures`.
+# async-std-0.2.0
+
+* No longer depends on `futures`.
+
+# 0.3.0
+
+* The `cleanup` module is gone, it was not a good API. Replaced by conditional
+  termination in `flag`.
+* Some abstractions/patterns are moved to `low_level` submodule, as they are
+  considered building blocks, not for direct use (`register`, `pipe`,
+  `channel`).
+* The signal constants are moved to a submodule (`consts`), together with few
+  more constants, to not clutter the root.
 * The forever iterator no longer consumes.
+
+# registry-1.3.0
+
+* The `unregister_signal` in is deprecated, without a replacement.
 
 # 0.2.2
 

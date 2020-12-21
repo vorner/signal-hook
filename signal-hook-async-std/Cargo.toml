@@ -1,6 +1,6 @@
 [package]
 name = "signal-hook-async-std"
-version = "0.1.0"
+version = "0.2.0"
 authors = [
     "Michal 'vorner' Vaner <vorner@vorner.cz>",
     "Thomas Himmelstoss <thimm@posteo.de>",
@@ -22,7 +22,7 @@ maintenance = { status = "actively-developed" }
 [dependencies]
 libc = "~0.2"
 async-std = "~1"
-signal-hook = { version = "~0.2", path = ".." }
+signal-hook = { version = "~0.3", path = ".." }
 
 [dev-dependencies]
 async-std = { version = "~1", features = ["attributes"] }

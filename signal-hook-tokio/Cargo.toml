@@ -1,6 +1,6 @@
 [package]
 name = "signal-hook-tokio"
-version = "0.1.0"
+version = "0.2.0"
 authors = [
     "Michal 'vorner' Vaner <vorner@vorner.cz>",
     "Thomas Himmelstoss <thimm@posteo.de>",
@@ -25,7 +25,7 @@ support-v0_3 = ["tokio-0_3", "futures-0_3"]
 
 [dependencies]
 libc = "~0.2"
-signal-hook = { version = "~0.2", path = ".." }
+signal-hook = { version = "~0.3", path = ".." }
 tokio-0_1 = { package = "tokio", version = "~0.1", optional = true }
 futures-0_1 = { package = "futures", version = "~0.1", optional = true }
 tokio-0_3 = { package = "tokio", version = "~0.3", features = ["net"], optional = true }
