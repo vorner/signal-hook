@@ -24,42 +24,41 @@
 //! multiple termination signals arrive before it is handled, it recognizes the last one.
 //!
 //! ```rust
-//! extern crate signal_hook;
-//!
 //! use std::io::Error;
 //! use std::sync::Arc;
 //! use std::sync::atomic::{AtomicUsize, Ordering};
 //!
+//! use signal_hook::consts::signal::*;
 //! use signal_hook::flag as signal_flag;
 //!
 //! fn main() -> Result<(), Error> {
 //!     let term = Arc::new(AtomicUsize::new(0));
-//!     const SIGTERM: usize = signal_hook::SIGTERM as usize;
-//!     const SIGINT: usize = signal_hook::SIGINT as usize;
+//!     const SIGTERM_U: usize = SIGTERM as usize;
+//!     const SIGINT_U: usize = SIGINT as usize;
 //! #   #[cfg(not(windows))]
-//!     const SIGQUIT: usize = signal_hook::SIGQUIT as usize;
-//!     signal_flag::register_usize(signal_hook::SIGTERM, Arc::clone(&term), SIGTERM)?;
-//!     signal_flag::register_usize(signal_hook::SIGINT, Arc::clone(&term), SIGINT)?;
+//!     const SIGQUIT_U: usize = SIGQUIT as usize;
+//!     signal_flag::register_usize(SIGTERM, Arc::clone(&term), SIGTERM_U)?;
+//!     signal_flag::register_usize(SIGINT, Arc::clone(&term), SIGINT_U)?;
 //! #   #[cfg(not(windows))]
-//!     signal_flag::register_usize(signal_hook::SIGQUIT, Arc::clone(&term), SIGQUIT)?;
+//!     signal_flag::register_usize(SIGQUIT, Arc::clone(&term), SIGQUIT_U)?;
 //!
 //! #   // Hack to terminate the example when run as a doc-test.
-//! #   term.store(SIGTERM, Ordering::Relaxed);
+//! #   term.store(SIGTERM_U, Ordering::Relaxed);
 //!     loop {
 //!         match term.load(Ordering::Relaxed) {
 //!             0 => {
 //!                 // Do some useful stuff here
 //!             }
-//!             SIGTERM => {
+//!             SIGTERM_U => {
 //!                 eprintln!("Terminating on the TERM signal");
 //!                 break;
 //!             }
-//!             SIGINT => {
+//!             SIGINT_U => {
 //!                 eprintln!("Terminating on the INT signal");
 //!                 break;
 //!             }
 //! #           #[cfg(not(windows))]
-//!             SIGQUIT => {
+//!             SIGQUIT_U => {
 //!                 eprintln!("Terminating on the QUIT signal");
 //!                 break;
 //!             }
@@ -74,27 +73,25 @@
 //! Sending a signal to self and seeing it arrived (not of a practical usage on itself):
 //!
 //! ```rust
-//! extern crate libc;
-//! extern crate signal_hook;
-//!
 //! use std::io::Error;
 //! use std::sync::Arc;
 //! use std::sync::atomic::{AtomicBool, Ordering};
 //! use std::thread;
 //! use std::time::Duration;
 //!
+//! use signal_hook::consts::signal::*;
+//! use signal_hook::low_level::raise;
+//!
 //! fn main() -> Result<(), Error> {
 //!     let got = Arc::new(AtomicBool::new(false));
 //! #   #[cfg(not(windows))]
-//!     signal_hook::flag::register(signal_hook::SIGUSR1, Arc::clone(&got))?;
+//!     signal_hook::flag::register(SIGUSR1, Arc::clone(&got))?;
 //! #   #[cfg(windows)]
-//! #   signal_hook::flag::register(signal_hook::SIGTERM, Arc::clone(&got))?;
-//!     unsafe {
-//! #       #[cfg(not(windows))]
-//!         libc::raise(signal_hook::SIGUSR1);
-//! #       #[cfg(windows)]
-//! #       libc::raise(signal_hook::SIGTERM);
-//!     }
+//! #   signal_hook::flag::register(SIGTERM, Arc::clone(&got))?;
+//! #   #[cfg(not(windows))]
+//!     raise(SIGUSR1).unwrap();
+//! #   #[cfg(windows)]
+//! #   raise(SIGTERM).unwrap();
 //!     // A sleep here, because it could run the signal handler in another thread and we may not
 //!     // see the flag right away. This is still a hack and not guaranteed to work, it is just an
 //!     // example!
@@ -108,12 +105,11 @@
 //! together with reopening the log file).
 //!
 //! ```rust
-//! extern crate signal_hook;
-//!
 //! use std::io::Error;
 //! use std::sync::Arc;
 //! use std::sync::atomic::{AtomicBool, Ordering};
 //!
+//! use signal_hook::consts::signal::*;
 //! use signal_hook::flag as signal_flag;
 //!
 //! fn main() -> Result<(), Error> {
@@ -121,11 +117,11 @@
 //!     let reload = Arc::new(AtomicBool::new(true));
 //!     let term = Arc::new(AtomicBool::new(false));
 //! #   #[cfg(not(windows))]
-//!     signal_flag::register(signal_hook::SIGHUP, Arc::clone(&reload))?;
-//!     signal_flag::register(signal_hook::SIGINT, Arc::clone(&term))?;
-//!     signal_flag::register(signal_hook::SIGTERM, Arc::clone(&term))?;
+//!     signal_flag::register(SIGHUP, Arc::clone(&reload))?;
+//!     signal_flag::register(SIGINT, Arc::clone(&term))?;
+//!     signal_flag::register(SIGTERM, Arc::clone(&term))?;
 //! #   #[cfg(not(windows))]
-//!     signal_flag::register(signal_hook::SIGQUIT, Arc::clone(&term))?;
+//!     signal_flag::register(SIGQUIT, Arc::clone(&term))?;
 //!     while !term.load(Ordering::Relaxed) {
 //!         // Using swap here, not load, to reset it back to false once it is reloaded.
 //!         if reload.swap(false, Ordering::Relaxed) {
@@ -155,12 +151,41 @@ pub fn register(signal: c_int, flag: Arc<AtomicBool>) -> Result<SigId, Error> {
     // * Signals should not come very often, so the performance does not really matter.
     // * We promise the order of actions, but setting different atomics with Relaxed or similar
     //   would not guarantee the effective order.
-    unsafe { crate::register(signal, move || flag.store(true, Ordering::SeqCst)) }
+    unsafe { crate::low_level::register(signal, move || flag.store(true, Ordering::SeqCst)) }
 }
 
 /// Registers an action to set the flag to the given value whenever the signal arrives.
 pub fn register_usize(signal: c_int, flag: Arc<AtomicUsize>, value: usize) -> Result<SigId, Error> {
-    unsafe { crate::register(signal, move || flag.store(value, Ordering::SeqCst)) }
+    unsafe { crate::low_level::register(signal, move || flag.store(value, Ordering::SeqCst)) }
+}
+
+/// Terminate the application on a signal if the given condition is true.
+///
+/// This can be used for different use cases. One of them (with the condition being always true) is
+/// just unconditionally terminate on the given signal.
+///
+/// Another is being able to turn on and off the behaviour by the shared flag.
+///
+/// The last one is handling double CTRL+C ‒ if the user presses CTRL+C, we would like to start a
+/// graceful shutdown. But if anything ever gets stuck in the shutdown, second CTRL+C (or other
+/// such termination signal) should terminate the application without further delay.
+///
+/// To do that, one can combine this with [`register`]. On the first run, the flag is `false` and
+/// this doesn't terminate. But then the flag is set to true during the first run and „arms“ the
+/// shutdown on the second run. Note that it matters in which order the actions are registered (the
+/// shutdown must go first). And yes, this also allows asking the user „Do you want to terminate“
+/// and disarming the abrupt shutdown if the user answers „No“.
+pub fn register_conditional_shutdown(
+    signal: c_int,
+    status: c_int,
+    condition: Arc<AtomicBool>,
+) -> Result<SigId, Error> {
+    let action = move || {
+        if condition.load(Ordering::SeqCst) {
+            crate::low_level::exit(status);
+        }
+    };
+    unsafe { crate::low_level::register(signal, action) }
 }
 
 #[cfg(test)]
@@ -169,14 +194,14 @@ mod tests {
     use std::time::{Duration, Instant};
 
     use super::*;
+    use crate::consts::signal::*;
 
     fn self_signal() {
-        unsafe {
-            #[cfg(not(windows))]
-            libc::raise(crate::SIGUSR1);
-            #[cfg(windows)]
-            libc::raise(crate::SIGTERM);
-        }
+        #[cfg(not(windows))]
+        const SIG: c_int = SIGUSR1;
+        #[cfg(windows)]
+        const SIG: c_int = SIGTERM;
+        crate::low_level::raise(SIG).unwrap();
     }
 
     fn wait_flag(flag: &AtomicBool) -> bool {
@@ -198,17 +223,19 @@ mod tests {
         // When we register the action, it is active.
         let flag = Arc::new(AtomicBool::new(false));
         #[cfg(not(windows))]
-        let signal = register(crate::SIGUSR1, Arc::clone(&flag)).unwrap();
+        let signal = register(SIGUSR1, Arc::clone(&flag)).unwrap();
         #[cfg(windows)]
         let signal = register(crate::SIGTERM, Arc::clone(&flag)).unwrap();
         self_signal();
         assert!(wait_flag(&flag));
         // But stops working after it is unregistered.
-        assert!(crate::unregister(signal));
+        assert!(crate::low_level::unregister(signal));
         flag.store(false, Ordering::Relaxed);
         self_signal();
         assert!(!wait_flag(&flag));
         // And the unregistration actually dropped its copy of the Arc
         assert_eq!(1, Arc::strong_count(&flag));
     }
+
+    // The shutdown is tested in tests/shutdown.rs
 }

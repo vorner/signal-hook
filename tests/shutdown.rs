@@ -1,4 +1,4 @@
-//! Tests for the cleanup module.
+//! Tests for the shutdown.
 //!
 //! The tests work like this:
 //!
@@ -9,13 +9,17 @@
 //!   terminates on the first, but would terminate after the signal.
 
 #![cfg(not(windows))] // Forks don't work on Windows, but windows has the same implementation.
-extern crate libc;
-extern crate signal_hook;
 
 use std::io::Error;
 use std::ptr;
+use std::sync::atomic::AtomicBool;
+use std::sync::Arc;
 use std::thread;
 use std::time::Duration;
+
+use signal_hook::consts::signal::*;
+use signal_hook::flag;
+use signal_hook::low_level;
 
 fn do_test<C: FnOnce()>(child: C) {
     unsafe {
@@ -53,8 +57,13 @@ fn do_test<C: FnOnce()>(child: C) {
 #[test]
 fn cleanup_inside_signal() {
     fn hook() {
-        unsafe { signal_hook::register(libc::SIGTERM, || ()).unwrap() };
-        signal_hook::cleanup::register(libc::SIGTERM, vec![libc::SIGTERM]).unwrap();
+        // Make sure we have some signal handler, not the default.
+        unsafe { low_level::register(SIGTERM, || ()).unwrap() };
+        let shutdown_cond = Arc::new(AtomicBool::new(false));
+        // „disarmed“ shutdown
+        flag::register_conditional_shutdown(SIGTERM, 0, Arc::clone(&shutdown_cond)).unwrap();
+        // But arm at the first SIGTERM
+        flag::register(SIGTERM, shutdown_cond).unwrap();
     }
     do_test(hook);
 }
@@ -65,8 +74,8 @@ fn cleanup_inside_signal() {
 fn cleanup_after_signal() {
     fn hook() {
         let mut signals = signal_hook::iterator::Signals::new(&[libc::SIGTERM]).unwrap();
-        assert_eq!(Some(libc::SIGTERM), signals.into_iter().next());
-        signal_hook::cleanup::cleanup_signal(libc::SIGTERM).unwrap();
+        assert_eq!(Some(SIGTERM), signals.into_iter().next());
+        flag::register_conditional_shutdown(SIGTERM, 0, Arc::new(AtomicBool::new(true))).unwrap();
     }
     do_test(hook);
 }

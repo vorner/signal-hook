@@ -29,7 +29,7 @@ use std::sync::{Arc, Mutex};
 use libc::{self, c_int};
 
 use super::exfiltrator::Exfiltrator;
-use crate::pipe::{self, WakeMethod};
+use crate::low_level::pipe::{self, WakeMethod};
 use crate::SigId;
 
 /// Maximal signal number we support.
@@ -65,7 +65,7 @@ impl Drop for DeliveryState {
     fn drop(&mut self) {
         let lock = self.registered_signal_ids.lock().unwrap();
         for id in lock.iter().filter_map(|s| *s) {
-            crate::unregister(id);
+            crate::low_level::unregister(id);
         }
     }
 }

@@ -477,15 +477,17 @@ const FORBIDDEN_IMPL: &[c_int] = &[SIGKILL, SIGSTOP, SIGILL, SIGFPE, SIGSEGV];
 /// # Examples
 ///
 /// ```rust
-/// extern crate signal_hook;
+/// extern crate signal_hook_registry;
 ///
 /// use std::io::Error;
 /// use std::process;
 ///
 /// fn main() -> Result<(), Error> {
-///     let signal = unsafe { signal_hook::register(signal_hook::SIGTERM, || process::abort()) }?;
+///     let signal = unsafe {
+///         signal_hook_registry::register(signal_hook::consts::SIGTERM, || process::abort())
+///     }?;
 ///     // Stuff here...
-///     signal_hook::unregister(signal); // Not really necessary.
+///     signal_hook_registry::unregister(signal); // Not really necessary.
 ///     Ok(())
 /// }
 /// ```
@@ -641,22 +643,14 @@ pub fn unregister(id: SigId) -> bool {
     replace
 }
 
-/// Removes all previously installed actions for a given signal.
-///
-/// This is similar to the [`unregister`] function, with the sole difference it removes all actions
-/// for the given signal.
-///
-/// Returns if any hooks were actually removed (returns false if there was no hook registered for
-/// the signal).
-///
-/// # Warning
-///
-/// Similar to [`unregister`], this does not manipulate the signal handler in the OS, it only
-/// removes the hooks on the Rust side.
-///
-/// Furthermore, this will remove *all* signal hooks of the given signal. These may have been
-/// registered by some library or unrelated part of the program. Therefore, this should be only
-/// used by the top-level application.
+// We keep this one here for strict backwards compatibility, but the API is kind of bad. One can
+// delete actions that don't belong to them, which is kind of against the whole idea of not
+// breaking stuff for others.
+#[deprecated(
+    since = "1.3.0",
+    note = "Don't use. Can influence unrelated parts of program / unknown actions"
+)]
+#[doc(hidden)]
 pub fn unregister_signal(signal: c_int) -> bool {
     let globals = GlobalData::ensure();
     let mut replace = false;

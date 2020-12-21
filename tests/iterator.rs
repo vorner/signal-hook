@@ -9,17 +9,18 @@ use std::sync::Arc;
 use std::thread::{self, JoinHandle};
 use std::time::Duration;
 
+use signal_hook::consts::{SIGUSR1, SIGUSR2};
 use signal_hook::iterator::{Handle, Signals};
-use signal_hook::{SIGUSR1, SIGUSR2};
+use signal_hook::low_level::raise;
 
 use serial_test::serial;
 
 fn send_sigusr1() {
-    unsafe { libc::raise(SIGUSR1) };
+    raise(SIGUSR1).unwrap();
 }
 
 fn send_sigusr2() {
-    unsafe { libc::raise(SIGUSR2) };
+    raise(SIGUSR2).unwrap();
 }
 
 fn setup_without_any_signals() -> (Signals, Handle) {

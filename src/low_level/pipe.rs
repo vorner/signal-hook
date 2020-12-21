@@ -15,7 +15,7 @@
 //! If you want to integrate with some asynchronous library, plugging streams from `mio-uds` or
 //! `tokio-uds` libraries should work.
 //!
-//! If it looks too low-level for your needs, the [`iterator`](../iterator/) module contains some
+//! If it looks too low-level for your needs, the [`iterator`][crate::iterator] module contains some
 //! higher-lever interface that also uses a self-pipe pattern under the hood.
 //!
 //! # Correct order of handling
@@ -57,17 +57,17 @@
 //! terminating). It sends the signal to itself, so it correctly terminates.
 //!
 //! ```rust
-//! extern crate libc;
-//! extern crate signal_hook;
-//!
 //! use std::io::{Error, Read};
 //! use std::os::unix::net::UnixStream;
 //!
+//! use signal_hook::consts::SIGUSR1;
+//! use signal_hook::low_level::{pipe, raise};
+//!
 //! fn main() -> Result<(), Error> {
 //!     let (mut read, write) = UnixStream::pair()?;
-//!     signal_hook::pipe::register(signal_hook::SIGUSR1, write)?;
+//!     pipe::register(SIGUSR1, write)?;
 //!     // This will write into the pipe write end through the signal handler
-//!     unsafe { libc::raise(signal_hook::SIGUSR1) };
+//!     raise(SIGUSR1).unwrap();
 //!     let mut buff = [0];
 //!     read.read_exact(&mut buff)?;
 //!     println!("Happily terminating");
@@ -186,7 +186,7 @@ pub fn register_raw(signal: c_int, pipe: RawFd) -> Result<SigId, Error> {
         }
     };
     let action = move || fd.wake();
-    unsafe { crate::register(signal, action) }
+    unsafe { super::register(signal, action) }
 }
 
 /// Registers a write to a self-pipe whenever there's the signal.
@@ -214,7 +214,7 @@ mod tests {
     // Note: multiple tests share the SIGUSR1 signal. This is fine, we only need to know the signal
     // arrives. It's OK to arrive multiple times, from multiple tests.
     fn wakeup() {
-        unsafe { assert_eq!(0, libc::raise(libc::SIGUSR1)) }
+        crate::low_level::raise(libc::SIGUSR1).unwrap();
     }
 
     #[test]

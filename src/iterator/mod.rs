@@ -21,30 +21,31 @@
 //!
 //! use std::io::Error;
 //!
+//! use signal_hook::consts::signal::*;
 //! use signal_hook::iterator::Signals;
 //!
 //! fn main() -> Result<(), Error> {
 //!     let mut signals = Signals::new(&[
-//!         signal_hook::SIGHUP,
-//!         signal_hook::SIGTERM,
-//!         signal_hook::SIGINT,
-//!         signal_hook::SIGQUIT,
-//! #       signal_hook::SIGUSR1,
+//!         SIGHUP,
+//!         SIGTERM,
+//!         SIGINT,
+//!         SIGQUIT,
+//! #       SIGUSR1,
 //!     ])?;
 //! #   // A trick to terminate the example when run as doc-test. Not part of the real code.
-//! #   unsafe { libc::raise(signal_hook::SIGUSR1) };
+//! #   signal_hook::low_level::raise(SIGUSR1).unwrap();
 //!     'outer: loop {
 //!         // Pick up signals that arrived since last time
 //!         for signal in signals.pending() {
 //!             match signal as libc::c_int {
-//!                 signal_hook::SIGHUP => {
+//!                 SIGHUP => {
 //!                     // Reload configuration
 //!                     // Reopen the log file
 //!                 }
-//!                 signal_hook::SIGTERM | signal_hook::SIGINT | signal_hook::SIGQUIT => {
+//!                 SIGTERM | SIGINT | SIGQUIT => {
 //!                     break 'outer;
 //!                 },
-//! #               signal_hook::SIGUSR1 => return Ok(()),
+//! #               SIGUSR1 => return Ok(()),
 //!                 _ => unreachable!(),
 //!             }
 //!         }
@@ -102,17 +103,18 @@ use self::exfiltrator::{Exfiltrator, SignalOnly};
 /// #
 /// # use std::io::Error;
 /// # use std::thread;
+/// use signal_hook::consts::signal::*;
 /// use signal_hook::iterator::Signals;
 ///
 /// #
 /// # fn main() -> Result<(), Error> {
-/// let mut signals = Signals::new(&[signal_hook::SIGUSR1, signal_hook::SIGUSR2])?;
+/// let mut signals = Signals::new(&[SIGUSR1, SIGUSR2])?;
 /// let handle = signals.handle();
 /// let thread = thread::spawn(move || {
 ///     for signal in &mut signals {
 ///         match signal {
-///             signal_hook::SIGUSR1 => {},
-///             signal_hook::SIGUSR2 => {},
+///             SIGUSR1 => {},
+///             SIGUSR2 => {},
 ///             _ => unreachable!(),
 ///         }
 ///     }
@@ -244,16 +246,17 @@ impl<E: Exfiltrator> SignalsInfo<E> {
     /// # use std::io::Error;
     /// # use std::thread;
     /// #
+    /// use signal_hook::consts::signal::*;
     /// use signal_hook::iterator::Signals;
     ///
     /// # fn main() -> Result<(), Error> {
-    /// let mut signals = Signals::new(&[signal_hook::SIGUSR1, signal_hook::SIGUSR2])?;
+    /// let mut signals = Signals::new(&[SIGUSR1, SIGUSR2])?;
     /// let handle = signals.handle();
     /// thread::spawn(move || {
     ///     for signal in signals.forever() {
     ///         match signal {
-    ///             signal_hook::SIGUSR1 => {},
-    ///             signal_hook::SIGUSR2 => {},
+    ///             SIGUSR1 => {},
+    ///             SIGUSR2 => {},
     ///             _ => unreachable!(),
     ///         }
     ///     }

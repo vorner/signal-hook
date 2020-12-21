@@ -14,6 +14,9 @@
 #[cfg(feature = "extended-siginfo")]
 pub mod origin;
 
+#[cfg(feature = "extended-siginfo")]
+pub use origin::WithOrigin;
+
 use std::sync::atomic::{AtomicBool, Ordering};
 
 use libc::{c_int, siginfo_t};
