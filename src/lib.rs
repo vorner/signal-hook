@@ -312,6 +312,23 @@
 //! * [`signal-hook-tokio`](https://docs.rs/signal-hook-tokio) for Tokio support
 //!
 //! Feel free to open a pull requests if you want to add support for runtimes not mentioned above.
+//!
+//! # Porting from previous versions
+//!
+//! There were some noisy changes when going from 0.2 version to the 0.3 version. In particular:
+//!
+//! * A lot of things moved around to make the structure of the crate a bit more understandable.
+//!   Most of the time it should be possible to just search the documentation for the name that
+//!   can't be resolved to discover the new location.
+//!   - The signal constants (`SIGTERM`, for example) are in [`consts`] submodule (individual
+//!     imports) and in the [`consts::signal`] (for wildcard import of all of them).
+//!   - Some APIs that are considered more of a low-level building blocks than for casual day to
+//!     day use are now in the [`low_level`] submodule.
+//! * The previous version contained the `cleanup` module that allowed for removal of the actions
+//!   in rather destructive way (nuking actions of arbitrary other parts of the program). This is
+//!   completely gone in this version. The use case of shutting down the application on second
+//!   CTRL+C is now supported by a pattern described in the [`flag`] submodule. For other similar
+//!   needs, refer above for emulating default handlers.
 
 pub mod flag;
 #[cfg(all(not(windows), feature = "iterator"))]
