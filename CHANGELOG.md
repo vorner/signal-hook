@@ -1,3 +1,7 @@
+# 0.1.17
+
+* Use caret dependencies to allow -registry 1.3.
+
 # 0.1.16
 
 * Fix possible blocking in signal handler registered by `Signals`.

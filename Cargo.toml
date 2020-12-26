@@ -1,6 +1,6 @@
 [package]
 name = "signal-hook"
-version = "0.1.16"
+version = "0.1.17"
 authors = ["Michal 'vorner' Vaner <vorner@vorner.cz>"]
 description = "Unix signal handling"
 documentation = "https://docs.rs/signal-hook"
@@ -26,17 +26,17 @@ members = [
 ]
 
 [dependencies]
-libc = "~0.2"
-futures = { version = "~0.1", optional = true }
-mio_0_7 = { package = "mio", version = "~0.7", features = ["os-util"], optional = true }
-mio = { version = "~0.6", optional = true }
-signal-hook-registry = { version = "~1.2", path = "signal-hook-registry" }
-tokio-reactor = { version = "~0.1", optional = true }
+libc = "^0.2"
+futures = { version = "^0.1", optional = true }
+mio_0_7 = { package = "mio", version = "^0.7", features = ["os-util"], optional = true }
+mio = { version = "^0.6", optional = true }
+signal-hook-registry = { version = "^1.2", path = "signal-hook-registry" }
+tokio-reactor = { version = "^0.1", optional = true }
 
 [dev-dependencies]
-mio_0_7 = { package ="mio", version = "~0.7", features = ["os-poll", "os-util"] }
-version-sync = "~0.8"
-tokio = "~0.1"
+mio_0_7 = { package ="mio", version = "^0.7", features = ["os-poll", "os-util"] }
+version-sync = "^0.8"
+tokio = "^0.1"
 
 [package.metadata.docs.rs]
 all-features = true

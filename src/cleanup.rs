@@ -124,6 +124,7 @@ pub fn cleanup_signal(signal: c_int) -> Result<(), Error> {
 }
 
 #[cfg(not(windows))]
+#[allow(clippy::map_collect_result_unit)] // try_for_each is too new
 fn verify_signals_exist(signals: &[c_int]) -> Result<(), Error> {
     signals
         .iter()

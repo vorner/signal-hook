@@ -1,11 +1,13 @@
 #![doc(
-    html_root_url = "https://docs.rs/signal-hook/0.1.16/signal-hook/",
     test(attr(deny(warnings))),
     test(attr(allow(bare_trait_objects, unknown_lints)))
 )]
-#![deny(missing_docs, warnings)]
-// Don't fail on links to things not enabled in features
-#![allow(unknown_lints, intra_doc_link_resolution_failure)]
+#![allow(
+    unknown_lints,
+    renamed_and_removed_lints,
+    intra_doc_link_resolution_failure,
+    broken_itra_doc_links
+)]
 //! Library for easier and safe Unix signal handling
 //!
 //! Unix signals are inherently hard to handle correctly, for several reasons:

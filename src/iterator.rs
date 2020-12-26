@@ -206,7 +206,7 @@ impl Signals {
     ///
     /// # Panics
     ///
-    /// * If the given signal is [forbidden][::FORBIDDEN].
+    /// * If the given signal is [forbidden][crate::FORBIDDEN].
     /// * If the signal number is negative or larger than internal limit. The limit should be
     ///   larger than any supported signal the OS supports.
     pub fn add_signal(&self, signal: c_int) -> Result<(), Error> {
