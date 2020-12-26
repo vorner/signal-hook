@@ -903,7 +903,7 @@ dependencies = [
 
 [[package]]
 name = "signal-hook"
-version = "0.3.0"
+version = "0.3.1"
 dependencies = [
  "libc",
  "serial_test",
