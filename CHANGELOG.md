@@ -1,3 +1,8 @@
+# 0.3.1
+
+* Use caret dependencies where appropriate (to allow upgrades on
+  signal-hook-registry).
+
 # async-std-0.2.0
 
 * No longer depends on `futures`.
