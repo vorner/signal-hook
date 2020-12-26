@@ -1,3 +1,7 @@
+# 0.2.3
+
+* Use caret dependencies to allow -registry 1.3 and such.
+
 # 0.2.2
 
 * Extractor for the origin of a signal (PID, UID, what caused it).
