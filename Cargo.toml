@@ -33,12 +33,12 @@ members = [
 ]
 
 [dependencies]
-libc = "~0.2"
-signal-hook-registry = { version = "~1.3", path = "signal-hook-registry" }
-signal-hook-sys = { version = "~0.1", path = "signal-hook-sys", optional = true }
+libc = "^0.2"
+signal-hook-registry = { version = "^1.3", path = "signal-hook-registry" }
+signal-hook-sys = { version = "^0.1", path = "signal-hook-sys", optional = true }
 
 [dev-dependencies]
-serial_test = "~0.5"
+serial_test = "^0.5"
 
 [package.metadata.docs.rs]
 all-features = true
