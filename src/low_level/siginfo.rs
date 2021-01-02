@@ -3,7 +3,54 @@
 //! See [`Origin`].
 
 use libc::{c_int, pid_t, siginfo_t, uid_t};
-use signal_hook_sys::internal::{Cause as ICause, SigInfo};
+// Careful: make sure the signature and the constants match the C source
+extern "C" {
+    fn sighook_signal_cause(info: &siginfo_t) -> ICause;
+    fn sighook_signal_pid(info: &siginfo_t) -> pid_t;
+    fn sighook_signal_uid(info: &siginfo_t) -> uid_t;
+}
+
+// Warning: must be in sync with the C code
+#[derive(Copy, Clone, Debug, Eq, PartialEq)]
+#[non_exhaustive]
+#[repr(u8)]
+// For some reason, the fact it comes from the C makes rustc emit warning that *some* of these are
+// not constructed. No idea why only some of them.
+#[allow(dead_code)]
+enum ICause {
+    Unknown = 0,
+    Kernel = 1,
+    User = 2,
+    TKill = 3,
+    Queue = 4,
+    MesgQ = 5,
+    Exited = 6,
+    Killed = 7,
+    Dumped = 8,
+    Trapped = 9,
+    Stopped = 10,
+    Continued = 11,
+}
+
+impl ICause {
+    // The MacOs doesn't use the SI_* constants and leaves si_code at 0. But it doesn't use an
+    // union, it has a good-behaved struct with fields and therefore we *can* read the values,
+    // even though they'd contain nonsense (zeroes). We wipe that out later.
+    #[cfg(target_os = "macos")]
+    fn has_process(self) -> bool {
+        true
+    }
+
+    #[cfg(not(target_os = "macos"))]
+    fn has_process(self) -> bool {
+        use ICause::*;
+        match self {
+            Unknown | Kernel => false,
+            User | TKill | Queue | MesgQ | Exited | Killed | Dumped | Trapped | Stopped
+            | Continued => true,
+        }
+    }
+}
 
 /// Information about process, as presented in the signal metadata.
 #[derive(Copy, Clone, Debug, Eq, PartialEq)]
@@ -14,6 +61,23 @@ pub struct Process {
 
     /// The user owning the process.
     pub uid: uid_t,
+}
+
+impl Process {
+    /**
+     * Extract the process information.
+     *
+     * # Safety
+     *
+     * The `info` must have a `si_code` corresponding to some situation that has the `si_pid`
+     * and `si_uid` filled in.
+     */
+    unsafe fn extract(info: &siginfo_t) -> Self {
+        Self {
+            pid: sighook_signal_pid(info),
+            uid: sighook_signal_uid(info),
+        }
+    }
 }
 
 /// The means by which a signal was sent by other process.
@@ -154,14 +218,22 @@ impl Origin {
     /// The value passed by kernel satisfies this, care must be taken only when constructed
     /// manually.
     pub unsafe fn extract(info: &siginfo_t) -> Self {
+        let cause = sighook_signal_cause(info);
+        let process = if cause.has_process() {
+            let process = Process::extract(info);
+            // On macos we don't have the si_code to go by, but we can go by the values being
+            // empty there.
+            if cfg!(target_os = "macos") && process.pid == 0 && process.uid == 0 {
+                None
+            } else {
+                Some(process)
+            }
+        } else {
+            None
+        };
         let signal = info.si_signo;
-        let extracted = SigInfo::extract(info);
-        let process = extracted.process.map(|p| Process {
-            pid: p.pid,
-            uid: p.uid,
-        });
         Origin {
-            cause: extracted.cause.into(),
+            cause: cause.into(),
             signal,
             process,
         }
