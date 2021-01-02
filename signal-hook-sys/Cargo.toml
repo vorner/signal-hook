@@ -1,6 +1,6 @@
 [package]
 name = "signal-hook-sys"
-version = "0.1.0"
+version = "0.1.1"
 authors = ["Michal 'vorner' Vaner <vorner@vorner.cz>"]
 edition = "2018"
 description = "Backend crate for signal-hook, with some low-level C code"

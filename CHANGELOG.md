@@ -1,3 +1,8 @@
+# 0.3.2
+
+* Allow extracting Origin from the raw `siginfo_t` structure by hand, without
+  needing an iterator.
+
 # 0.3.1
 
 * Use caret dependencies where appropriate (to allow upgrades on

@@ -86,11 +86,20 @@ pub mod internal {
     }
 
     impl SigInfo {
-        // Note: shall be async-signal-safe
-        pub fn extract(info: &siginfo_t) -> Self {
-            let cause = unsafe { sighook_signal_cause(info) };
+        /// Extract the rust-style sig info.
+        ///
+        /// # Safety
+        ///
+        /// The `si_code` and `si_signo` needs to be properly set according to what fields are
+        /// actually available in the structure on systems where this is backed by an union (on the
+        /// C side).
+        ///
+        /// Note that kernel-provided value satisfies this. Care needs to be taken only if the
+        /// structure is constructed by hand.
+        pub unsafe fn extract(info: &siginfo_t) -> Self {
+            let cause = sighook_signal_cause(info);
             let process = if cause.has_process() {
-                let process = unsafe { Process::extract(info) };
+                let process = Process::extract(info);
                 // On macos we don't have the si_code to go by, but we can go by the values being
                 // empty there.
                 if cfg!(target_os = "macos") && process.pid == 0 && process.uid == 0 {

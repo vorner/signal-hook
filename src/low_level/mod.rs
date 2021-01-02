@@ -10,6 +10,8 @@ use libc::c_int;
 pub mod channel;
 #[cfg(not(windows))]
 pub mod pipe;
+#[cfg(feature = "signal-hook-sys")]
+pub mod siginfo;
 
 pub use signal_hook_registry::{register, unregister};
 
