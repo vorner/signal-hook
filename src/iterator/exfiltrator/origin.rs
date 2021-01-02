@@ -45,7 +45,7 @@ impl Drop for Slot {
 /// ```rust
 /// # use signal_hook::consts::SIGUSR1;
 /// # use signal_hook::iterator::SignalsInfo;
-/// # use signal_hook::iterator::exfiltrator::origin::WithOrigin;
+/// # use signal_hook::iterator::exfiltrator::WithOrigin;
 /// #
 /// # fn main() -> Result<(), std::io::Error> {
 /// // Subscribe to SIGUSR1, with information about the process.
@@ -56,7 +56,7 @@ impl Drop for Slot {
 /// unsafe { libc::kill(my_pid, SIGUSR1) };
 ///
 /// // Grab the signal and look into the details.
-/// let received = signals.forever().next().unwrap();
+/// let received = signals.wait().next().unwrap();
 ///
 /// assert_eq!(SIGUSR1, received.signal);
 /// assert_eq!(my_pid, received.process.unwrap().pid);
