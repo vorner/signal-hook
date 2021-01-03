@@ -1,4 +1,14 @@
 //! An exfiltrator providing the raw [`siginfo_t`].
+
+// Note on unsafety in this module:
+// * Implementing an unsafe trait, that one needs to ensure at least store is async-signal-safe.
+//   That's done by delegating to the Channel (and reading an atomic pointer, but that one is
+//   primitive op).
+// * A bit of juggling with atomic and raw pointers. In effect, that is just late lazy
+//   initialization, the Slot is in line with Option would be, except that it is set atomically
+//   during the init. Lifetime is ensured by not dropping until the Drop of the whole slot and that
+//   is checked by taking `&mut self`.
+
 use std::sync::atomic::{AtomicPtr, Ordering};
 
 use libc::{c_int, siginfo_t};
