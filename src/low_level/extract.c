@@ -1,3 +1,7 @@
+/*
+ * Low-level extraction code to overcome rust's libc not having the best access
+ * to siginfo_t details.
+ */
 #include <stdbool.h>
 #include <signal.h>
 #include <stdint.h>

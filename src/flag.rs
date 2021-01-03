@@ -16,7 +16,7 @@
 //! didn't block at all, the checking for the signal would turn into a busy-loop.
 //!
 //! If what you need is blocking until a signal comes, you might find better tools in the
-//! [`pipe`](../pipe/) and [`iterator`](../iterator/) modules.
+//! [`pipe`][crate::low_level::pipe] and [`iterator`][crate::iterator] modules.
 //!
 //! # Examples
 //!

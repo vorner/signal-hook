@@ -13,9 +13,11 @@
 
 #[cfg(feature = "extended-siginfo")]
 pub mod origin;
+pub mod raw;
 
 #[cfg(feature = "extended-siginfo")]
 pub use origin::WithOrigin;
+pub use raw::WithRawSiginfo;
 
 use std::sync::atomic::{AtomicBool, Ordering};
 

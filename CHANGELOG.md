@@ -1,3 +1,12 @@
+# 0.3.2
+
+* Allow extracting Origin from the raw `siginfo_t` structure by hand, without
+  needing an iterator.
+* Folding the signal-hook-sys inline (but still compiling C code only
+  conditionally).
+* `WithRawSiginfo` extractor (to get hands on the raw `siginfo_t`).
+* Bugfix: Don't leak on WithOrigin destruction.
+
 # 0.3.1
 
 * Use caret dependencies where appropriate (to allow upgrades on

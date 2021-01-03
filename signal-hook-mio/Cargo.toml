@@ -36,3 +36,4 @@ serial_test = "~0.5"
 
 [package.metadata.docs.rs]
 all-features = true
+rustdoc-args = ["--cfg", "docsrs"]

@@ -110,7 +110,7 @@ fn signals_block_wait() {
     struct ThreadGuard {
         thread: Option<JoinHandle<()>>,
         finish: Arc<AtomicBool>,
-    };
+    }
 
     impl ThreadGuard {
         fn shutdown(&mut self) {

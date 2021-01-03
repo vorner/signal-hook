@@ -1,6 +1,6 @@
 [package]
 name = "signal-hook"
-version = "0.3.1"
+version = "0.3.2"
 authors = [
     "Michal 'vorner' Vaner <vorner@vorner.cz>",
     "Thomas Himmelstoss <thimm@posteo.de>",
@@ -20,7 +20,9 @@ maintenance = { status = "actively-developed" }
 channel = []
 default = ["channel", "iterator"]
 iterator = []
-extended-siginfo = ["channel", "iterator", "signal-hook-sys"]
+# TODO: Unify them on the next breaking release.
+extended-siginfo = ["channel", "iterator", "extended-siginfo-raw"]
+extended-siginfo-raw = ["cc"]
 
 [workspace]
 members = [
@@ -29,16 +31,18 @@ members = [
     "signal-hook-tokio",
     "signal-hook-mio",
     "signal-hook-async-std",
-    "signal-hook-sys",
 ]
 
 [dependencies]
 libc = "^0.2"
 signal-hook-registry = { version = "^1.3", path = "signal-hook-registry" }
-signal-hook-sys = { version = "^0.1", path = "signal-hook-sys", optional = true }
 
 [dev-dependencies]
 serial_test = "^0.5"
 
 [package.metadata.docs.rs]
 all-features = true
+rustdoc-args = ["--cfg", "docsrs"]
+
+[build-dependencies]
+cc = { version = "^1", optional = true }
