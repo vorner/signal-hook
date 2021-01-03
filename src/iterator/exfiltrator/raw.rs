@@ -20,6 +20,15 @@ use crate::low_level::channel::Channel;
 #[derive(Default, Debug)]
 pub struct Slot(AtomicPtr<Channel<siginfo_t>>);
 
+impl Drop for Slot {
+    fn drop(&mut self) {
+        let ptr = self.0.load(Ordering::Acquire);
+        if !ptr.is_null() {
+            drop(unsafe { Box::from_raw(ptr) });
+        }
+    }
+}
+
 /// The [`Exfiltrator`][crate::iterator::exfiltrator::Exfiltrator] that produces the raw
 /// [`libc::siginfo_t`]. Note that it might look differently on different OSes and its API is a
 /// little bit more limited than its C counterpart.
