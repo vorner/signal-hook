@@ -1,3 +1,4 @@
+Testing stuff...
 # Signal-hook
 
 [![Actions Status](https://github.com/vorner/signal-hook/workflows/test/badge.svg)](https://github.com/vorner/signal-hook/actions)

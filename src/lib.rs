@@ -365,7 +365,7 @@ pub mod consts {
         pub const SIGABRT_COMPAT: libc::c_int = 6;
         #[cfg(windows)]
         /// Ctrl-Break is pressed for Windows Console processes.
-        pub const SIGBREAK: libc::c_int = 21;
+                pub const SIGBREAK: libc::c_int = 21;
     }
 
     pub use self::signal::*;
