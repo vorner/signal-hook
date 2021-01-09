@@ -12,8 +12,11 @@ pub mod channel;
 pub mod pipe;
 #[cfg(feature = "extended-siginfo-raw")]
 pub mod siginfo;
+mod signal_details;
 
 pub use signal_hook_registry::{register, unregister};
+
+pub use self::signal_details::signal_name;
 
 /// The usual raise, just the safe wrapper around it.
 ///

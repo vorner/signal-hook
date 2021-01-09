@@ -1,3 +1,7 @@
+* `low_level::signal_name` to look up human readable name.
+* The `Origin`'s debug output now contains the human readable name of the
+  signal.
+
 # 0.3.2
 
 * Allow extracting Origin from the raw `siginfo_t` structure by hand, without

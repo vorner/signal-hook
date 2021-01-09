@@ -2,7 +2,12 @@
 //!
 //! See [`Origin`].
 
+use std::fmt::{Debug, Formatter, Result as FmtResult};
+
 use libc::{c_int, pid_t, siginfo_t, uid_t};
+
+use crate::low_level;
+
 // Careful: make sure the signature and the constants match the C source
 extern "C" {
     fn sighook_signal_cause(info: &siginfo_t) -> ICause;
@@ -176,7 +181,7 @@ impl From<ICause> for Cause {
 ///
 /// This is produced by the [`WithOrigin`] exfiltrator (or can be [extracted][Origin::extract] from
 /// `siginfo_t` by hand).
-#[derive(Clone, Debug, Eq, PartialEq)]
+#[derive(Clone, Eq, PartialEq)]
 #[non_exhaustive]
 pub struct Origin {
     /// The signal that happened.
@@ -202,6 +207,21 @@ pub struct Origin {
     ///
     /// Future versions may enrich the enum by further values.
     pub cause: Cause,
+}
+
+impl Debug for Origin {
+    fn fmt(&self, fmt: &mut Formatter) -> FmtResult {
+        fn named_signal(sig: c_int) -> String {
+            low_level::signal_name(sig)
+                .map(|n| format!("{} ({})", n, sig))
+                .unwrap_or_else(|| sig.to_string())
+        }
+        fmt.debug_struct("Origin")
+            .field("signal", &named_signal(self.signal))
+            .field("process", &self.process)
+            .field("cause", &self.cause)
+            .finish()
+    }
 }
 
 impl Origin {
