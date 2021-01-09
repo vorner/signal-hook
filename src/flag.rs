@@ -141,22 +141,26 @@ use std::io::Error;
 use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::sync::Arc;
 
-use libc::c_int;
+use libc::{c_int, EINVAL};
 
-use crate::SigId;
+use crate::{low_level, SigId};
 
 /// Registers an action to set the flag to `true` whenever the given signal arrives.
+///
+/// # Panics
+///
+/// If the signal is one of the forbidden.
 pub fn register(signal: c_int, flag: Arc<AtomicBool>) -> Result<SigId, Error> {
     // We use SeqCst for two reasons:
     // * Signals should not come very often, so the performance does not really matter.
     // * We promise the order of actions, but setting different atomics with Relaxed or similar
     //   would not guarantee the effective order.
-    unsafe { crate::low_level::register(signal, move || flag.store(true, Ordering::SeqCst)) }
+    unsafe { low_level::register(signal, move || flag.store(true, Ordering::SeqCst)) }
 }
 
 /// Registers an action to set the flag to the given value whenever the signal arrives.
 pub fn register_usize(signal: c_int, flag: Arc<AtomicUsize>, value: usize) -> Result<SigId, Error> {
-    unsafe { crate::low_level::register(signal, move || flag.store(value, Ordering::SeqCst)) }
+    unsafe { low_level::register(signal, move || flag.store(value, Ordering::SeqCst)) }
 }
 
 /// Terminate the application on a signal if the given condition is true.
@@ -175,6 +179,10 @@ pub fn register_usize(signal: c_int, flag: Arc<AtomicUsize>, value: usize) -> Re
 /// shutdown on the second run. Note that it matters in which order the actions are registered (the
 /// shutdown must go first). And yes, this also allows asking the user „Do you want to terminate“
 /// and disarming the abrupt shutdown if the user answers „No“.
+///
+/// # Panics
+///
+/// If the signal is one of the forbidden.
 pub fn register_conditional_shutdown(
     signal: c_int,
     status: c_int,
@@ -182,10 +190,42 @@ pub fn register_conditional_shutdown(
 ) -> Result<SigId, Error> {
     let action = move || {
         if condition.load(Ordering::SeqCst) {
-            crate::low_level::exit(status);
+            low_level::exit(status);
         }
     };
-    unsafe { crate::low_level::register(signal, action) }
+    unsafe { low_level::register(signal, action) }
+}
+
+/// Conditionally runs an emulation of the default action on the given signal.
+///
+/// If the provided condition is true at the time of invoking the signal handler, the equivalent of
+/// the default action of the given signal is run. It is a bit similar to
+/// [`register_conditional_shutdown`], except that it doesn't terminate for non-termination
+/// signals, it runs their default handler.
+///
+/// # Panics
+///
+/// If the signal is one of the forbidden
+///
+/// # Errors
+///
+/// Similarly to the [`emulate_default_handler`][low_level::emulate_default_handler] function, this
+/// one looks the signal up in a table. If it is unknown, an error is returned.
+///
+/// Additionally to that, any errors that can be caused by a registration of a handler can happen
+/// too.
+pub fn register_conditional_default(
+    signal: c_int,
+    condition: Arc<AtomicBool>,
+) -> Result<SigId, Error> {
+    // Verify we know about this particular signal.
+    low_level::signal_name(signal).ok_or_else(|| Error::from_raw_os_error(EINVAL))?;
+    let action = move || {
+        if condition.load(Ordering::SeqCst) {
+            let _ = low_level::emulate_default_handler(signal);
+        }
+    };
+    unsafe { low_level::register(signal, action) }
 }
 
 #[cfg(test)]

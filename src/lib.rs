@@ -103,7 +103,8 @@
 //!   does not restore the default handler (such behaviour would be at times inconsistent with
 //!   making the actions independent and there's no reasonable way to do so in a race-free way in a
 //!   multi-threaded program while also dealing with signal handlers registered with other
-//!   libraries). It is, however, possible to *emulate* the default handler ‒ there are only 4
+//!   libraries). It is, however, possible to *emulate* the default handler (see the
+//!   [`emulate_default_handler`][low_level::emulate_default_handler]) ‒ there are only 4
 //!   default handlers:
 //!   - Ignore. This is easy to emulate.
 //!   - Abort. Depending on if you call it from within a signal handler of from outside, the
@@ -269,8 +270,8 @@
 //!                 if has_terminal {
 //!                     app.restore_term();
 //!                     has_terminal = false;
-//!                     // And actually stop ourselves, by a little trick.
-//!                     low_level::raise(SIGSTOP)?;
+//!                     // And actually stop ourselves.
+//!                     low_level::emulate_default_handler(SIGTSTP)?;
 //!                 }
 //!             }
 //!             SIGCONT => {

@@ -1,3 +1,5 @@
+* `low_level::emulate_default_handler` to emulate whatever default handler would
+  do.
 * `low_level::signal_name` to look up human readable name.
 * The `Origin`'s debug output now contains the human readable name of the
   signal.
