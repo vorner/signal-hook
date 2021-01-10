@@ -1,3 +1,5 @@
+# 0.3.3
+
 * `low_level::emulate_default_handler` to emulate whatever default handler would
   do.
 * `low_level::signal_name` to look up human readable name.
