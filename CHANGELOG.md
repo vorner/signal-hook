@@ -1,3 +1,7 @@
+# 0.3.4
+
+* Fix feature dependencies (`iterator` depends on `channel`).
+
 # 0.3.3
 
 * `low_level::emulate_default_handler` to emulate whatever default handler would
