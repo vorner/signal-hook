@@ -19,7 +19,7 @@ maintenance = { status = "actively-developed" }
 [features]
 channel = []
 default = ["channel", "iterator"]
-iterator = []
+iterator = ["channel"]
 # TODO: Unify them on the next breaking release.
 extended-siginfo = ["channel", "iterator", "extended-siginfo-raw"]
 extended-siginfo-raw = ["cc"]
