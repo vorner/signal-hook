@@ -247,6 +247,8 @@ mod tests {
     fn wait_flag(flag: &AtomicBool) -> bool {
         let start = Instant::now();
         while !flag.load(Ordering::Relaxed) {
+            // Replaced by hint::spin_loop, but we want to support older compiler
+            #[allow(deprecated)]
             atomic::spin_loop_hint();
             if Instant::now() - start > Duration::from_secs(1) {
                 // We reached a timeout and nothing happened yet.

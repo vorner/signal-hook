@@ -181,6 +181,8 @@ impl<T> HalfLock<T> {
                 if iter % YIELD_EVERY == 0 {
                     thread::yield_now();
                 } else {
+                    // Replaced by hint::spin_loop, but we want to support older compiler
+                    #[allow(deprecated)]
                     atomic::spin_loop_hint();
                 }
             }
