@@ -1,3 +1,5 @@
+#![cfg(feature = "futures-v0_3")]
+
 use futures::stream::StreamExt;
 
 use std::sync::atomic::{AtomicBool, Ordering};

@@ -1,11 +1,15 @@
 #![doc(test(attr(deny(warnings))))]
 #![warn(missing_docs)]
 #![cfg_attr(docsrs, feature(doc_cfg))]
+#![cfg_attr(not(feature = "futures-v0_3"), allow(dead_code, unused_imports))]
 
 //! A crate for integrating signal handling with the Tokio runtime.
 //!
 //! This provides the [`Signals`][Signals] struct which acts as a
-//! [`Stream`][`futures::stream::Stream`] of signals.
+//! [`Stream`][futures_core_0_3::stream::Stream] of signals.
+//!
+//! Note that the `futures-v0_3` feature of this crate must be
+//! enabled for `Signals` to implement the `Stream` trait.
 //!
 //! # Example
 //!
@@ -114,15 +118,17 @@ macro_rules! implement_signals_with_pipe {
     };
 }
 
+use tokio::net::UnixStream;
+implement_signals_with_pipe!(UnixStream);
+
 use std::pin::Pin;
 use std::task::{Context, Poll};
 
-use futures::Stream;
+#[cfg(feature = "futures-v0_3")]
+use futures_core_0_3::Stream;
+
 use signal_hook::iterator::backend::PollResult;
 use tokio::io::{AsyncRead, ReadBuf};
-use tokio::net::UnixStream;
-
-implement_signals_with_pipe!(UnixStream);
 
 impl Signals {
     fn has_signals(read: &mut UnixStream, ctx: &mut Context<'_>) -> Result<bool, Error> {
@@ -136,6 +142,8 @@ impl Signals {
     }
 }
 
+#[cfg_attr(docsrs, doc(cfg(feature = "futures-v0_3")))]
+#[cfg(feature = "futures-v0_3")]
 impl Stream for Signals {
     type Item = c_int;
 
