@@ -1,3 +1,7 @@
+# signal-hook-tokio-unreleased
+
+* Support for tokio 1.0.
+
 # 0.3.4
 
 * Fix feature dependencies (`iterator` depends on `channel`).
