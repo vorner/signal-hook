@@ -68,76 +68,68 @@
 //! # }
 //! ```
 
-macro_rules! implement_signals_with_pipe {
-    ($pipe:ty) => {
-        use std::borrow::Borrow;
-        use std::io::Error;
-
-        use libc::c_int;
-
-        pub use signal_hook::iterator::backend::Handle;
-        use signal_hook::iterator::backend::{OwningSignalIterator, SignalDelivery};
-        use signal_hook::iterator::exfiltrator::{Exfiltrator, SignalOnly};
-
-        /// An asynchronous [`Stream`] of arriving signals.
-        ///
-        /// The stream doesn't return the signals in the order they were recieved by
-        /// the process and may merge signals received multiple times.
-        pub struct SignalsInfo<E: Exfiltrator = SignalOnly>(OwningSignalIterator<$pipe, E>);
-
-        impl<E: Exfiltrator> SignalsInfo<E> {
-            /// Create a `SignalsInfo` instance.
-            ///
-            /// This registers all the signals listed. The same restrictions (panics, errors) apply
-            /// as with [`Handle::add_signal`].
-            pub fn new<I, S>(signals: I) -> Result<Self, Error>
-            where
-                I: IntoIterator<Item = S>,
-                S: Borrow<c_int>,
-                E: Default,
-            {
-                Self::with_exfiltrator(signals, E::default())
-            }
-
-            /// A constructor with explicit exfiltrator.
-            pub fn with_exfiltrator<I, S>(signals: I, exfiltrator: E) -> Result<Self, Error>
-            where
-                I: IntoIterator<Item = S>,
-                S: Borrow<c_int>,
-            {
-                let (read, write) = UnixStream::pair()?;
-                let inner = SignalDelivery::with_pipe(read, write, exfiltrator, signals)?;
-                Ok(Self(OwningSignalIterator::new(inner)))
-            }
-
-            /// Get a shareable [`Handle`] for this `Signals` instance.
-            ///
-            /// This can be used to add further signals or close the [`Signals`] instance
-            /// which terminates the whole signal stream.
-            pub fn handle(&self) -> Handle {
-                self.0.handle()
-            }
-        }
-
-        /// Simplified version of the signals stream.
-        ///
-        /// This one simply returns the signal numbers, while [`SignalsInfo`] can provide additional
-        /// information.
-        pub type Signals = SignalsInfo<SignalOnly>;
-    };
-}
-
-use tokio::net::UnixStream;
-implement_signals_with_pipe!(UnixStream);
-
+use std::borrow::Borrow;
+use std::io::Error;
 use std::pin::Pin;
 use std::task::{Context, Poll};
+
+use libc::c_int;
+
+use tokio::io::{AsyncRead, ReadBuf};
+use tokio::net::UnixStream;
+
+pub use signal_hook::iterator::backend::Handle;
+use signal_hook::iterator::backend::{OwningSignalIterator, PollResult, SignalDelivery};
+use signal_hook::iterator::exfiltrator::{Exfiltrator, SignalOnly};
 
 #[cfg(feature = "futures-v0_3")]
 use futures_core_0_3::Stream;
 
-use signal_hook::iterator::backend::PollResult;
-use tokio::io::{AsyncRead, ReadBuf};
+/// An asynchronous [`Stream`] of arriving signals.
+///
+/// The stream doesn't return the signals in the order they were recieved by
+/// the process and may merge signals received multiple times.
+pub struct SignalsInfo<E: Exfiltrator = SignalOnly>(OwningSignalIterator<UnixStream, E>);
+
+impl<E: Exfiltrator> SignalsInfo<E> {
+    /// Create a `SignalsInfo` instance.
+    ///
+    /// This registers all the signals listed. The same restrictions (panics, errors) apply
+    /// as with [`Handle::add_signal`].
+    pub fn new<I, S>(signals: I) -> Result<Self, Error>
+    where
+        I: IntoIterator<Item = S>,
+        S: Borrow<c_int>,
+        E: Default,
+    {
+        Self::with_exfiltrator(signals, E::default())
+    }
+
+    /// A constructor with explicit exfiltrator.
+    pub fn with_exfiltrator<I, S>(signals: I, exfiltrator: E) -> Result<Self, Error>
+    where
+        I: IntoIterator<Item = S>,
+        S: Borrow<c_int>,
+    {
+        let (read, write) = UnixStream::pair()?;
+        let inner = SignalDelivery::with_pipe(read, write, exfiltrator, signals)?;
+        Ok(Self(OwningSignalIterator::new(inner)))
+    }
+
+    /// Get a shareable [`Handle`] for this `Signals` instance.
+    ///
+    /// This can be used to add further signals or close the [`Signals`] instance
+    /// which terminates the whole signal stream.
+    pub fn handle(&self) -> Handle {
+        self.0.handle()
+    }
+}
+
+/// Simplified version of the signals stream.
+///
+/// This one simply returns the signal numbers, while [`SignalsInfo`] can provide additional
+/// information.
+pub type Signals = SignalsInfo<SignalOnly>;
 
 impl Signals {
     fn has_signals(read: &mut UnixStream, ctx: &mut Context<'_>) -> Result<bool, Error> {
