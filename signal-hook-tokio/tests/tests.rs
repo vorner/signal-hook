@@ -1,7 +1,4 @@
-#![cfg(feature = "support-v0_3")]
-
-use futures_0_3 as futures;
-use tokio_0_3 as tokio;
+#![cfg(feature = "futures-v0_3")]
 
 use futures::stream::StreamExt;
 
@@ -11,7 +8,7 @@ use std::time::Duration;
 
 use signal_hook::consts::SIGUSR1;
 use signal_hook::low_level::raise;
-use signal_hook_tokio::v0_3::Signals;
+use signal_hook_tokio::Signals;
 
 use serial_test::serial;
 

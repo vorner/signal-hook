@@ -20,19 +20,17 @@ travis-ci = { repository = "vorner/signal-hook" }
 maintenance = { status = "actively-developed" }
 
 [features]
-support-v0_1 = ["tokio-0_1", "futures-0_1"]
-support-v0_3 = ["tokio-0_3", "futures-0_3"]
+futures-v0_3 = ["futures-core-0_3"]
 
 [dependencies]
 libc = "~0.2"
 signal-hook = { version = "~0.3", path = ".." }
-tokio-0_1 = { package = "tokio", version = "~0.1", optional = true }
-futures-0_1 = { package = "futures", version = "~0.1", optional = true }
-tokio-0_3 = { package = "tokio", version = "~0.3", features = ["net"], optional = true }
-futures-0_3 = { package = "futures", version = "~0.3", optional = true }
+futures-core-0_3 = { package = "futures-core", version = "~0.3", optional = true }
+tokio = { version = "~1", features = ["net"] }
 
 [dev-dependencies]
-tokio-0_3 = { package = "tokio", version = "~0.3", features = ["full"]}
+tokio = { package = "tokio", version = "~1", features = ["full"] }
+futures = "~0.3"
 serial_test = "~0.5"
 
 [package.metadata.docs.rs]
