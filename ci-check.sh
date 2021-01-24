@@ -8,7 +8,7 @@
 set -ex
 
 rm -f Cargo.lock
-cargo build --all --exclude signal-hook-async-std --exclude signal-hook-sys
+cargo build --all --exclude signal-hook-async-std --exclude signal-hook-tokio
 
 if [ "$RUST_VERSION" = 1.36.0 ] ; then
 	exit
