@@ -6,7 +6,7 @@
 //! A crate for integrating signal handling with the Tokio runtime.
 //!
 //! This provides the [`Signals`][Signals] struct which acts as a
-//! [`Stream`][futures_core_0_3::stream::Stream] of signals.
+//! [`Stream`] of signals.
 //!
 //! Note that the `futures-v0_3` feature of this crate must be
 //! enabled for `Signals` to implement the `Stream` trait.
@@ -14,6 +14,8 @@
 //! # Example
 //!
 //! ```rust
+//! # #[cfg(feature = "futures-v0_3")]
+//! # mod test {
 //! use std::io::Error;
 //!
 //! use signal_hook::consts::signal::*;
@@ -38,6 +40,7 @@
 //! }
 //!
 //! #[tokio::main]
+//! # pub
 //! async fn main() -> Result<(), Error> {
 //!     let signals = Signals::new(&[
 //!         SIGHUP,
@@ -57,6 +60,12 @@
 //!
 //!     Ok(())
 //! }
+//! }
+//! # fn main() -> Result<(), std::io::Error> {
+//! #    #[cfg(feature = "futures-v0_3")]
+//! #    test::main()?;
+//! #    Ok(())
+//! # }
 //! ```
 
 macro_rules! implement_signals_with_pipe {
