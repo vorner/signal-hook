@@ -1,4 +1,4 @@
-# signal-hook-tokio-unreleased
+# signal-hook-tokio-0.3.0
 
 * Support for tokio 1.0.
 
