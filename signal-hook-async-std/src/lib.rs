@@ -53,6 +53,8 @@
 use std::borrow::Borrow;
 use std::io::Error;
 use std::pin::Pin;
+use std::task::{Context, Poll};
+use std::os::unix::net::UnixStream;
 
 use libc::c_int;
 
@@ -60,16 +62,15 @@ pub use signal_hook::iterator::backend::Handle;
 use signal_hook::iterator::backend::{OwningSignalIterator, PollResult, SignalDelivery};
 use signal_hook::iterator::exfiltrator::{Exfiltrator, SignalOnly};
 
-use async_std::io::Read;
-use async_std::os::unix::net::UnixStream;
-use async_std::stream::Stream;
-use async_std::task::{Context, Poll};
+use futures_lite::io::AsyncRead;
+use futures_lite::stream::Stream;
+use async_io::Async;
 
 /// An asynchronous [`Stream`] of arriving signals.
 ///
 /// The stream doesn't return the signals in the order they were recieved by
 /// the process and may merge signals received multiple times.
-pub struct SignalsInfo<E: Exfiltrator = SignalOnly>(OwningSignalIterator<UnixStream, E>);
+pub struct SignalsInfo<E: Exfiltrator = SignalOnly>(OwningSignalIterator<Async<UnixStream>, E>);
 
 impl<E: Exfiltrator> SignalsInfo<E> {
     /// Create a `Signals` instance.
@@ -91,7 +92,7 @@ impl<E: Exfiltrator> SignalsInfo<E> {
         I: IntoIterator<Item = S>,
         S: Borrow<c_int>,
     {
-        let (read, write) = UnixStream::pair()?;
+        let (read, write) = Async::<UnixStream>::pair()?;
         let inner = SignalDelivery::with_pipe(read, write, exfiltrator, signals)?;
         Ok(Self(OwningSignalIterator::new(inner)))
     }
@@ -106,7 +107,7 @@ impl<E: Exfiltrator> SignalsInfo<E> {
 }
 
 impl SignalsInfo {
-    fn has_signals(read: &mut UnixStream, ctx: &mut Context<'_>) -> Result<bool, Error> {
+    fn has_signals(read: &mut Async<UnixStream>, ctx: &mut Context<'_>) -> Result<bool, Error> {
         match Pin::new(read).poll_read(ctx, &mut [0u8]) {
             Poll::Pending => Ok(false),
             Poll::Ready(Ok(num_read)) => Ok(num_read > 0),

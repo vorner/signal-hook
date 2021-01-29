@@ -21,7 +21,8 @@ maintenance = { status = "actively-developed" }
 
 [dependencies]
 libc = "~0.2"
-async-std = "~1"
+async-io = "~1"
+futures-lite = "~1"
 signal-hook = { version = "~0.3", path = ".." }
 
 [dev-dependencies]
