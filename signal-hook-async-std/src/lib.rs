@@ -52,9 +52,9 @@
 
 use std::borrow::Borrow;
 use std::io::Error;
+use std::os::unix::net::UnixStream;
 use std::pin::Pin;
 use std::task::{Context, Poll};
-use std::os::unix::net::UnixStream;
 
 use libc::c_int;
 
@@ -62,9 +62,9 @@ pub use signal_hook::iterator::backend::Handle;
 use signal_hook::iterator::backend::{OwningSignalIterator, PollResult, SignalDelivery};
 use signal_hook::iterator::exfiltrator::{Exfiltrator, SignalOnly};
 
+use async_io::Async;
 use futures_lite::io::AsyncRead;
 use futures_lite::stream::Stream;
-use async_io::Async;
 
 /// An asynchronous [`Stream`] of arriving signals.
 ///

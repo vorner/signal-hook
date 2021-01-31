@@ -1,6 +1,6 @@
 [package]
 name = "signal-hook-async-std"
-version = "0.2.0"
+version = "0.2.1"
 authors = [
     "Michal 'vorner' Vaner <vorner@vorner.cz>",
     "Thomas Himmelstoss <thimm@posteo.de>",
