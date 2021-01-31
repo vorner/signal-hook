@@ -1,3 +1,9 @@
+# signal-hook-async-std-0.2.1
+
+* Dependency updates ‒ no longer depends on the whole async-std, but only on
+  some smaller dependencies of it (`async-io`, `futures-lite`). This might make
+  it work even outside of async-std context.
+
 # signal-hook-tokio-0.3.0
 
 * Support for tokio 1.0.
