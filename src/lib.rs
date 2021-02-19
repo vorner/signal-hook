@@ -2,6 +2,7 @@
     test(attr(deny(warnings))),
     test(attr(allow(bare_trait_objects, unknown_lints)))
 )]
+#![cfg_attr(docrs, feature(doc_cfg))]
 #![warn(missing_docs)]
 // Don't fail on links to things not enabled in features
 #![allow(
@@ -163,6 +164,18 @@
 //! not all `Ctrl-C`s are turned into `SIGINT`.
 //!
 //! Patches to improve Windows support in this library are welcome.
+//!
+//! # Features
+//!
+//! There are several feature flags that control how much is available as part of the crate, some
+//! enabled by default.
+//!
+//! * `channel`: (enabled by default) The [Channel][crate::low_level::channel] synchronization
+//!   primitive for exporting data out of signal handlers.
+//! * `iterator`: (enabled by default) An [Signals iterator][crate::iterator::Signals] that
+//!   provides a convenient interface for receiving signals in rust-friendly way.
+//! * `extended-siginfo` adds support for providing extra information as part of the iterator
+//!   interface.
 //!
 //! # Examples
 //!
@@ -333,6 +346,7 @@
 
 pub mod flag;
 #[cfg(all(not(windows), feature = "iterator"))]
+#[cfg_attr(docrs, doc(cfg(all(not(windows), feature = "iterator"))))]
 pub mod iterator;
 pub mod low_level;
 

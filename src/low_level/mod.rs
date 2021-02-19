@@ -7,10 +7,13 @@ use std::io::Error;
 use libc::c_int;
 
 #[cfg(feature = "channel")]
+#[cfg_attr(docrs, doc(cfg(feature = "channel")))]
 pub mod channel;
 #[cfg(not(windows))]
+#[cfg_attr(docrs, doc(cfg(not(windows))))]
 pub mod pipe;
 #[cfg(feature = "extended-siginfo-raw")]
+#[cfg_attr(docrs, doc(cfg(feature = "extended-siginfo-raw")))]
 pub mod siginfo;
 mod signal_details;
 
