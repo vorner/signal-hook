@@ -1,3 +1,7 @@
+# 0.3.5
+
+* Doc: include the features & these little labels inside docs.
+
 # signal-hook-async-std-0.2.1
 
 * Dependency updates ‒ no longer depends on the whole async-std, but only on
