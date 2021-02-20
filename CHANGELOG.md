@@ -1,3 +1,7 @@
+# 0.3.6
+
+* Fix the labels on docs.rs :-|.
+
 # 0.3.5
 
 * Doc: include the features & these little labels inside docs.

@@ -12,7 +12,7 @@
 //! experience with them is gained.
 
 #[cfg(feature = "extended-siginfo")]
-#[cfg_attr(docrs, doc(cfg(feature = "extended-siginfo")))]
+#[cfg_attr(docsrs, doc(cfg(feature = "extended-siginfo")))]
 pub mod origin;
 pub mod raw;
 

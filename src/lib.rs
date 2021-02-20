@@ -2,7 +2,7 @@
     test(attr(deny(warnings))),
     test(attr(allow(bare_trait_objects, unknown_lints)))
 )]
-#![cfg_attr(docrs, feature(doc_cfg))]
+#![cfg_attr(docsrs, feature(doc_cfg))]
 #![warn(missing_docs)]
 // Don't fail on links to things not enabled in features
 #![allow(
@@ -346,7 +346,7 @@
 
 pub mod flag;
 #[cfg(all(not(windows), feature = "iterator"))]
-#[cfg_attr(docrs, doc(cfg(all(not(windows), feature = "iterator"))))]
+#[cfg_attr(docsrs, doc(cfg(all(not(windows), feature = "iterator"))))]
 pub mod iterator;
 pub mod low_level;
 
