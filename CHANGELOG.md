@@ -1,3 +1,7 @@
+# mio-0.2.2
+
+* The same fix, but for the 0.6 support 😇.
+
 # mio-0.2.1
 
 * Fix example: handle ErrorKind::Interrupted inside poll. It's very likely to
