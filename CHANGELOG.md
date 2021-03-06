@@ -1,3 +1,8 @@
+# mio-0.2.1
+
+* Fix example: handle ErrorKind::Interrupted inside poll. It's very likely to
+  happen, when we are waiting for signals there.
+
 # 0.3.6
 
 * Fix the labels on docs.rs :-|.

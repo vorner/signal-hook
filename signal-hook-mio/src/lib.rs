@@ -94,11 +94,11 @@ macro_rules! implement_signals_with_pipe {
 /// This provides the [`Signals`][v0_7::Signals] struct as an abstraction
 /// which can be used with [`mio::Poll`][mio_0_7::Poll].
 ///
-/// # Example
+/// # Examples
 ///
 /// ```rust
 /// # use mio_0_7 as mio;
-/// use std::io::Error;
+/// use std::io::{Error, ErrorKind};
 ///
 /// use signal_hook::consts::signal::*;
 /// use signal_hook_mio::v0_7::Signals;
@@ -120,7 +120,15 @@ macro_rules! implement_signals_with_pipe {
 ///
 ///     let mut events = Events::with_capacity(10);
 ///     'outer: loop {
-///         poll.poll(&mut events, None)?;
+///         poll.poll(&mut events, None)
+///             .or_else(|e| if e.kind() == ErrorKind::Interrupted {
+///                 // We get interrupt when a signal happens inside poll. That's non-fatal, just
+///                 // retry.
+///                 events.clear();
+///                 Ok(())
+///             } else {
+///                 Err(e)
+///             })?;
 ///         for event in events.iter() {
 ///             match event.token() {
 ///                 Token(0) => {
