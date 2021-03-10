@@ -5,6 +5,8 @@ use std::mem;
 use std::ptr;
 
 use libc::{c_int, EINVAL};
+#[cfg(not(windows))]
+use libc::{sigset_t, SIG_UNBLOCK};
 
 use crate::consts::signal::*;
 use crate::low_level;
@@ -170,6 +172,18 @@ pub fn emulate_default_handler(signal: c_int) -> Result<(), Error> {
         DefaultKind::Stop => low_level::raise(SIGSTOP),
         DefaultKind::Term => {
             if let Ok(()) = restore_default(signal) {
+                #[cfg(not(windows))]
+                unsafe {
+                    #[allow(deprecated)]
+                    let mut newsigs: sigset_t = mem::uninitialized();
+                    libc::sigemptyset(&mut newsigs);
+                    libc::sigaddset(&mut newsigs, signal);
+                    // Ignore the result, if it doesn't work, we try anyway
+                    // Also, sigprocmask is unspecified, but available on more systems. And we want
+                    // to just enable _something_. And if it doesn't work, we'll terminate
+                    // anyway... It's not UB, so we are good.
+                    libc::sigprocmask(SIG_UNBLOCK, &newsigs, ptr::null_mut());
+                }
                 let _ = low_level::raise(signal);
             }
             // Fallback if anything failed or someone managed to put some other action in in

@@ -1,3 +1,7 @@
+# 0.3.7
+
+* Unmask a signal in default emulation if it is termination.
+
 # mio-0.2.2
 
 * The same fix, but for the 0.6 support 😇.
