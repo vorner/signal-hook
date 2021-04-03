@@ -1,3 +1,7 @@
+# 0.3.8
+
+* Fix docs.rs build.
+
 # 0.3.7
 
 * Unmask a signal in default emulation if it is termination.
