@@ -60,7 +60,7 @@
 //!
 //!     Ok(())
 //! }
-//! }
+//! # }
 //! # fn main() -> Result<(), std::io::Error> {
 //! #    #[cfg(feature = "futures-v0_3")]
 //! #    test::main()?;
