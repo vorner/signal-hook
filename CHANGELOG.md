@@ -1,3 +1,7 @@
+# 0.3.9
+
+* Deliver SIGCHLD even on stop/continue.
+
 # 0.3.8
 
 * Fix docs.rs build.
