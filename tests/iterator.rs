@@ -247,7 +247,7 @@ fn delayed_signal_consumed() {
 fn is_closed_initially_returns_false() {
     let (_, controller) = setup_for_sigusr2();
 
-    assert_eq!(controller.is_closed(), false);
+    assert!(!controller.is_closed());
 }
 
 #[test]
@@ -256,5 +256,5 @@ fn is_closed_returns_true_when_closed() {
     let (_, controller) = setup_for_sigusr2();
     controller.close();
 
-    assert_eq!(controller.is_closed(), true);
+    assert!(controller.is_closed());
 }

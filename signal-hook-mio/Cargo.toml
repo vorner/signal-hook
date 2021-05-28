@@ -25,7 +25,7 @@ support-v0_7 = ["mio-0_7"]
 
 [dependencies]
 libc = "~0.2"
-signal-hook = { version = "~0.4", path = ".." }
+signal-hook = { version = "~0.3", path = ".." }
 mio-0_7 = { package = "mio", version = "~0.7", features = ["os-util", "uds"], optional = true}
 mio-0_6 = { package = "mio", version = "~0.6", optional = true}
 mio-uds = { version = "~0.6", optional = true}

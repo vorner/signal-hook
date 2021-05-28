@@ -46,9 +46,9 @@ async fn delayed() {
     let signals_task = async_std::task::spawn(get_signal(signals, Arc::clone(&recieved)));
 
     async_std::task::sleep(Duration::from_millis(100)).await;
-    assert_eq!(recieved.load(Ordering::SeqCst), false);
+    assert!(!recieved.load(Ordering::SeqCst));
 
     raise(SIGUSR1).unwrap();
     signals_task.await;
-    assert_eq!(recieved.load(Ordering::SeqCst), true);
+    assert!(recieved.load(Ordering::SeqCst));
 }
