@@ -230,7 +230,6 @@
 //! # fn reload_config(&self) {}
 //! # fn print_stats(&self) {}
 //! # }
-//!
 //! # pub
 //! fn main() -> Result<(), Error> {
 //!     // Make sure double CTRL+C and similar kills
