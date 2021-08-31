@@ -198,7 +198,7 @@ impl<E: Exfiltrator> SignalsInfo<E> {
 
     /// Waits for some signals to be available and returns an iterator.
     ///
-    /// This is similar to [`pending`][Signals::pending]. If there are no signals available, it
+    /// This is similar to [`pending`][SignalsInfo::pending]. If there are no signals available, it
     /// tries to wait for some to arrive. However, due to implementation details, this still can
     /// produce an empty iterator.
     ///
