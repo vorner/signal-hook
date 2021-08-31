@@ -1,3 +1,7 @@
+# 0.3.10
+
+* Doc link fixes.
+
 # 0.3.9
 
 * Deliver SIGCHLD even on stop/continue.

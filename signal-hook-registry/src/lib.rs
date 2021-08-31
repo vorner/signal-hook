@@ -344,7 +344,7 @@ extern "C" fn handler(sig: c_int, info: *mut siginfo_t, data: *mut c_void) {
     let fallback = globals.race_fallback.read();
     let sigdata = globals.data.read();
 
-    if let Some(ref slot) = sigdata.signals.get(&sig) {
+    if let Some(slot) = sigdata.signals.get(&sig) {
         unsafe { slot.prev.execute(sig, info, data) };
 
         let info = unsafe { info.as_ref() };
@@ -365,7 +365,7 @@ extern "C" fn handler(sig: c_int, info: *mut siginfo_t, data: *mut c_void) {
         for action in slot.actions.values() {
             action(info);
         }
-    } else if let Some(ref prev) = fallback.as_ref() {
+    } else if let Some(prev) = fallback.as_ref() {
         // In case we get called but don't have the slot for this signal set up yet, we are under
         // the race condition. We may have the old signal handler stored in the fallback
         // temporarily.
