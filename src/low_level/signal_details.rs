@@ -172,6 +172,16 @@ pub fn emulate_default_handler(signal: c_int) -> Result<(), Error> {
         DefaultKind::Stop => low_level::raise(SIGSTOP),
         DefaultKind::Term => {
             if let Ok(()) = restore_default(signal) {
+                // `sigemptyset` and `sigaddset` are not available on old Android versions before
+                // API 21 (Android 5.0).
+                // Unfortunately, we can't do conditional compilation based on the Android version,
+                // so we disable the code for all Android versions.
+                // As these old Android versions don't support 64-Bit-code anyway, we can leave
+                // the code enabled for 64-Bit-code.
+                #[cfg(not(all(
+                    target_os = "android",
+                    any(target_pointer_width = "32", target_pointer_width = "16")
+                )))]
                 #[cfg(not(windows))]
                 unsafe {
                     #[allow(deprecated)]
