@@ -34,6 +34,8 @@ mod sealed {
     /// For now, this is hidden from the public API, but the intention is to move it to a public
     /// place so users can implement it eventually, once we verify that it works well.
     ///
+    /// # Safety
+    ///
     /// The trait is unsafe as the [`Exfiltrator::store`] is called inside the signal handler and
     /// must be async-signal-safe. Implementing this correctly may be difficult, therefore care
     /// needs to be taken. One method known to work is encoding the data into an atomic variable.
