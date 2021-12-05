@@ -114,8 +114,14 @@
 //!     That one can't be replaced and always stops the application.
 //! * Many of the patterns here can collate multiple instances of the same signal into fewer
 //!   instances, if the application doesn't consume them fast enough. This is consistent with what
-//!   the kernel does if the application doesn't keep up with them, so it is something one needs to
-//!   deal with anyway.
+//!   the kernel does if the application doesn't keep up with them (at least for non-realtime
+//!   signals, see below), so it is something one needs to deal with anyway.
+//! * (By design) the library mostly _postpones_ or helps the user postpone acting on the signals
+//!   until later. This, in combination with the above collating inside the library may make it
+//!   unsuitable for realtime signals. These usually want to be handled directly inside the signal
+//!   handler ‒ which still can be done with [signal_hook_registry::register], but using unsafe and
+//!   due care. Patterns for working safely with realtime signals are not unwanted in the library,
+//!   but nobody contributed them yet.
 //!
 //! # Signal masks
 //!
