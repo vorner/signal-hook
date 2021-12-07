@@ -693,6 +693,7 @@ mod tests {
 
     /// Registering the forbidden signals is allowed in the _unchecked version.
     #[test]
+    #[allow(clippy::redundant_closure)] // Clippy, you're wrong. Because it changes the return value.
     fn forbidden_raw() {
         unsafe { register_signal_unchecked(SIGFPE, || std::process::abort()).unwrap() };
     }
