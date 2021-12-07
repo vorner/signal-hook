@@ -145,7 +145,6 @@ unsafe fn prepare_sigset(set: *mut sigset_t, mut signal: c_int) {
     set_raw.add(pos).write(bit);
 }
 
-
 #[cfg(not(all(target_os = "android", target_pointer_width = "32")))]
 unsafe fn prepare_sigset(set: *mut sigset_t, signal: c_int) {
     libc::sigemptyset(set);
