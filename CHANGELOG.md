@@ -1,3 +1,7 @@
+# 0.3.12
+
+* Fix accidentally broken windows build.
+
 # 0.3.11
 
 * Provide fallback sigaddset, sigemptyset on certain androids, as they are
