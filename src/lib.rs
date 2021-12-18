@@ -367,7 +367,7 @@ pub mod consts {
     /// namespace with other names. Also available in the [`consts`][crate::consts] directly (but
     /// with more constants around).
     pub mod signal {
-        #[cfg(not(windows))]
+        #[cfg(not(any(windows, target_os = "haiku")))]
         pub use libc::{
             SIGABRT, SIGALRM, SIGBUS, SIGCHLD, SIGCONT, SIGFPE, SIGHUP, SIGILL, SIGINT, SIGIO,
             SIGKILL, SIGPIPE, SIGPROF, SIGQUIT, SIGSEGV, SIGSTOP, SIGSYS, SIGTERM, SIGTRAP,
@@ -377,6 +377,14 @@ pub mod consts {
 
         #[cfg(windows)]
         pub use libc::{SIGABRT, SIGFPE, SIGILL, SIGINT, SIGSEGV, SIGTERM};
+
+        #[cfg(target_os = "haiku")]
+        pub use libc::{
+            SIGABRT, SIGALRM, SIGBUS, SIGCHLD, SIGCONT, SIGFPE, SIGHUP, SIGILL, SIGINT,
+            SIGKILL, SIGPIPE, SIGPROF, SIGQUIT, SIGSEGV, SIGSTOP, SIGSYS, SIGTERM, SIGTRAP,
+            SIGTSTP, SIGTTIN, SIGTTOU, SIGURG, SIGUSR1, SIGUSR2, SIGVTALRM, SIGWINCH, SIGXCPU,
+            SIGXFSZ,
+        };
 
         // NOTE: they perhaps deserve backport to libc.
         #[cfg(windows)]
