@@ -35,7 +35,7 @@ macro_rules! s {
     };
 }
 
-#[cfg(not(any(target_os = "windows", target_os = "haiku")))]
+#[cfg(not(windows))]
 const DETAILS: &[Details] = &[
     s!(SIGABRT, Term),
     s!(SIGALRM, Term),
@@ -47,43 +47,8 @@ const DETAILS: &[Details] = &[
     s!(SIGHUP, Term),
     s!(SIGILL, Term),
     s!(SIGINT, Term),
+    #[cfg(not(target_os = "haiku"))]
     s!(SIGIO, Ignore),
-    // Can't override anyway, but...
-    s!(SIGKILL, Term),
-    s!(SIGPIPE, Term),
-    s!(SIGPROF, Term),
-    s!(SIGQUIT, Term),
-    s!(SIGSEGV, Term),
-    // Can't override anyway, but...
-    s!(SIGSTOP, Stop),
-    s!(SIGSYS, Term),
-    s!(SIGTERM, Term),
-    s!(SIGTRAP, Term),
-    s!(SIGTSTP, Stop),
-    s!(SIGTTIN, Stop),
-    s!(SIGTTOU, Stop),
-    s!(SIGURG, Ignore),
-    s!(SIGUSR1, Term),
-    s!(SIGUSR2, Term),
-    s!(SIGVTALRM, Term),
-    s!(SIGWINCH, Ignore),
-    s!(SIGXCPU, Term),
-    s!(SIGXFSZ, Term),
-];
-
-#[cfg(target_os = "haiku")]
-const DETAILS: &[Details] = &[
-    s!(SIGABRT, Term),
-    s!(SIGALRM, Term),
-    s!(SIGBUS, Term),
-    s!(SIGCHLD, Ignore),
-    // Technically, continue the process... but this is not done *by* the process.
-    s!(SIGCONT, Ignore),
-    s!(SIGFPE, Term),
-    s!(SIGHUP, Term),
-    s!(SIGILL, Term),
-    s!(SIGINT, Term),
-    //s!(SIGIO, Ignore),
     // Can't override anyway, but...
     s!(SIGKILL, Term),
     s!(SIGPIPE, Term),
