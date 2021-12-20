@@ -369,10 +369,15 @@ pub mod consts {
     pub mod signal {
         #[cfg(not(windows))]
         pub use libc::{
-            SIGABRT, SIGALRM, SIGBUS, SIGCHLD, SIGCONT, SIGFPE, SIGHUP, SIGILL, SIGINT, SIGIO,
+            SIGABRT, SIGALRM, SIGBUS, SIGCHLD, SIGCONT, SIGFPE, SIGHUP, SIGILL, SIGINT,
             SIGKILL, SIGPIPE, SIGPROF, SIGQUIT, SIGSEGV, SIGSTOP, SIGSYS, SIGTERM, SIGTRAP,
             SIGTSTP, SIGTTIN, SIGTTOU, SIGURG, SIGUSR1, SIGUSR2, SIGVTALRM, SIGWINCH, SIGXCPU,
             SIGXFSZ,
+        };
+
+        #[cfg(not(any(windows, target_os = "haiku")))]
+        pub use libc::{
+            SIGIO,
         };
 
         #[cfg(windows)]

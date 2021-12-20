@@ -47,6 +47,7 @@ const DETAILS: &[Details] = &[
     s!(SIGHUP, Term),
     s!(SIGILL, Term),
     s!(SIGINT, Term),
+    #[cfg(not(target_os = "haiku"))]
     s!(SIGIO, Ignore),
     // Can't override anyway, but...
     s!(SIGKILL, Term),

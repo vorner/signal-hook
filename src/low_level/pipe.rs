@@ -229,6 +229,7 @@ mod tests {
     }
 
     #[test]
+    #[cfg(not(target_os = "haiku"))]
     fn register_dgram_socket() -> Result<(), Error> {
         let (read, write) = UnixDatagram::pair()?;
         register(libc::SIGUSR1, write)?;
