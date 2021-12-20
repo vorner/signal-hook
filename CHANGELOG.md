@@ -1,3 +1,7 @@
+# 0.3.13
+
+* Add haiku support.
+
 # 0.3.12
 
 * Fix accidentally broken windows build.
