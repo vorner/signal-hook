@@ -17,8 +17,7 @@
 //! use signal_hook::consts::signal::*;
 //! use signal_hook_async_std::Signals;
 //!
-//! async fn handle_signals(signals: Signals) {
-//!     let mut signals = signals.fuse();
+//! async fn handle_signals(mut signals: Signals) {
 //!     while let Some(signal) = signals.next().await {
 //!         match signal {
 //!             SIGHUP => {
@@ -106,7 +105,7 @@ impl<E: Exfiltrator> SignalsInfo<E> {
     }
 }
 
-impl SignalsInfo {
+impl<E: Exfiltrator> SignalsInfo<E> {
     fn has_signals(read: &mut Async<UnixStream>, ctx: &mut Context<'_>) -> Result<bool, Error> {
         match Pin::new(read).poll_read(ctx, &mut [0u8]) {
             Poll::Pending => Ok(false),
@@ -116,8 +115,8 @@ impl SignalsInfo {
     }
 }
 
-impl Stream for SignalsInfo {
-    type Item = c_int;
+impl<E: Exfiltrator> Stream for SignalsInfo<E> {
+    type Item = E::Output;
 
     fn poll_next(mut self: Pin<&mut Self>, ctx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
         match self.0.poll_signal(&mut |read| Self::has_signals(read, ctx)) {
