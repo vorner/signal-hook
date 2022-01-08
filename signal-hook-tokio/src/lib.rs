@@ -23,8 +23,7 @@
 //!
 //! use futures::stream::StreamExt;
 //!
-//! async fn handle_signals(signals: Signals) {
-//!     let mut signals = signals.fuse();
+//! async fn handle_signals(mut signals: Signals) {
 //!     while let Some(signal) = signals.next().await {
 //!         match signal {
 //!             SIGHUP => {
@@ -131,7 +130,7 @@ impl<E: Exfiltrator> SignalsInfo<E> {
 /// information.
 pub type Signals = SignalsInfo<SignalOnly>;
 
-impl Signals {
+impl<E: Exfiltrator> SignalsInfo<E> {
     fn has_signals(read: &mut UnixStream, ctx: &mut Context<'_>) -> Result<bool, Error> {
         let mut buf = [0u8];
         let mut read_buf = ReadBuf::new(&mut buf);
@@ -145,8 +144,8 @@ impl Signals {
 
 #[cfg_attr(docsrs, doc(cfg(feature = "futures-v0_3")))]
 #[cfg(feature = "futures-v0_3")]
-impl Stream for Signals {
-    type Item = c_int;
+impl<E: Exfiltrator> Stream for SignalsInfo<E> {
+    type Item = E::Output;
 
     fn poll_next(mut self: Pin<&mut Self>, ctx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
         match self.0.poll_signal(&mut |read| Self::has_signals(read, ctx)) {
