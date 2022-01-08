@@ -684,7 +684,7 @@ dependencies = [
 
 [[package]]
 name = "signal-hook-async-std"
-version = "0.2.1"
+version = "0.2.2"
 dependencies = [
  "async-io",
  "async-std",
@@ -725,7 +725,7 @@ dependencies = [
 
 [[package]]
 name = "signal-hook-tokio"
-version = "0.3.0"
+version = "0.3.1"
 dependencies = [
  "futures",
  "futures-core",

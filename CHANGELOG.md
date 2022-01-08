@@ -1,3 +1,8 @@
+# signal-hook-async-std-0.2.2
+# signal-hook-tokio-0.3.1
+
+* Fix support for SignalsInfo with non-default info extractors.
+
 # 0.3.13
 
 * Add haiku support.
