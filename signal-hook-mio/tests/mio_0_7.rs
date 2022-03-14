@@ -1,15 +1,21 @@
-#![cfg(feature = "support-v0_7")]
+#![cfg(any(feature = "support-v0_7", feature = "support-v0_8"))]
 
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 use std::thread;
 use std::time::Duration;
 
+#[cfg(all(feature = "support-v0_7", not(feature = "support-v0_8")))]
 use mio_0_7::{Events, Interest, Poll, Token};
+#[cfg(feature = "support-v0_8")]
+use mio_0_8::{Events, Interest, Poll, Token};
 
 use signal_hook::consts::{SIGUSR1, SIGUSR2};
 use signal_hook::low_level::raise;
+#[cfg(all(feature = "support-v0_7", not(feature = "support-v0_8")))]
 use signal_hook_mio::v0_7::Signals;
+#[cfg(feature = "support-v0_8")]
+use signal_hook_mio::v0_8::Signals;
 
 use serial_test::serial;
 
