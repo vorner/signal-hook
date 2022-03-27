@@ -1,3 +1,7 @@
+# signal-hook-mio-0.2.3
+
+* Support for mio 0.8
+
 # signal-hook-async-std-0.2.2
 # signal-hook-tokio-0.3.1
 
