@@ -377,6 +377,11 @@ pub mod consts {
         #[cfg(not(any(windows, target_os = "haiku")))]
         pub use libc::SIGIO;
 
+        #[cfg(any(
+            target_os="freebsd", target_os="dragonfly", target_os="netbsd", target_os="openbsd",
+            target_os="macos"))]
+        pub use libc::SIGINFO;
+
         #[cfg(windows)]
         pub use libc::{SIGABRT, SIGFPE, SIGILL, SIGINT, SIGSEGV, SIGTERM};
 

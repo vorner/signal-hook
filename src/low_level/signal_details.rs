@@ -47,6 +47,10 @@ const DETAILS: &[Details] = &[
     s!(SIGHUP, Term),
     s!(SIGILL, Term),
     s!(SIGINT, Term),
+    #[cfg(any(
+        target_os="freebsd", target_os="dragonfly", target_os="netbsd", 
+        target_os="openbsd", target_os="macos"))]
+    s!(SIGINFO, Ignore),
     #[cfg(not(target_os = "haiku"))]
     s!(SIGIO, Ignore),
     // Can't override anyway, but...
