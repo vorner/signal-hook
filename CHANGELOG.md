@@ -1,3 +1,7 @@
+# 0.3.14
+
+* Added the SIGINFO signal (where available).
+
 # signal-hook-mio-0.2.3
 
 * Support for mio 0.8
