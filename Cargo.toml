@@ -38,7 +38,7 @@ libc = "^0.2"
 signal-hook-registry = { version = "^1.4", path = "signal-hook-registry" }
 
 [dev-dependencies]
-serial_test = "^0.5"
+serial_test = "^0.7"
 
 [package.metadata.docs.rs]
 all-features = true
