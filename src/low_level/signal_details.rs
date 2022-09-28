@@ -111,7 +111,17 @@ fn restore_default(signal: c_int) -> Result<(), Error> {
     unsafe {
         // A C structure, supposed to be memset to 0 before use.
         let mut action: libc::sigaction = mem::zeroed();
-        action.sa_sigaction = libc::SIG_DFL as _;
+        #[cfg(target_os = "aix")]
+        let set_action = |action: &mut libc::sigaction, sigaction| {
+            action.sa_union.__su_sigaction = mem::transmute::<
+                usize,
+                extern "C" fn(libc::c_int, *mut libc::siginfo_t, *mut libc::c_void),
+            >(sigaction)
+        };
+        #[cfg(not(target_os = "aix"))]
+        let set_action =
+            |action: &mut libc::sigaction, sigaction| action.sa_sigaction = sigaction as _;
+        set_action(&mut action, libc::SIG_DFL);
         if libc::sigaction(signal, &action, ptr::null_mut()) == 0 {
             Ok(())
         } else {
