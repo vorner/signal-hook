@@ -159,12 +159,9 @@ impl Slot {
         // C data structure, expected to be zeroed out.
         let mut new: libc::sigaction = unsafe { mem::zeroed() };
         #[cfg(not(target_os = "aix"))]
-        let set_handler =
-            |action: &mut libc::sigaction, handler| action.sa_sigaction = handler as usize;
+        { new.sa_sigaction = handler as usize; }
         #[cfg(target_os = "aix")]
-        let set_handler =
-            |action: &mut libc::sigaction, handler| action.sa_union.__su_sigaction = handler;
-        set_handler(&mut new, handler);
+        { new.sa_union.__su_sigaction = handler; }
         // Android is broken and uses different int types than the rest (and different depending on
         // the pointer width). This converts the flags to the proper type no matter what it is on
         // the given platform.
