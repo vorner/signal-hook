@@ -1,3 +1,8 @@
+# 0.3.15
+# signal-hook-registry-1.4.1
+
+* AIX support (experimental/not guaranteed to work).
+
 # 0.3.14
 
 * Added the SIGINFO signal (where available).
