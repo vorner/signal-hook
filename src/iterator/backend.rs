@@ -309,11 +309,15 @@ where
             // should not be something like closed file descriptor. It could EAGAIN, but
             // that's OK in case we say MSG_DONTWAIT. If it's EINTR, then it's OK too,
             // it'll only create a spurious wakeup.
+            #[cfg(target_os = "aix")]
+            let nowait_flag = libc::MSG_NONBLOCK;
+            #[cfg(not(target_os = "aix"))]
+            let nowait_flag = libc::MSG_DONTWAIT;
             while libc::recv(
                 self.read.as_raw_fd(),
                 buff.as_mut_ptr() as *mut libc::c_void,
                 SIZE,
-                libc::MSG_DONTWAIT,
+                nowait_flag,
             ) > 0
             {}
         }
