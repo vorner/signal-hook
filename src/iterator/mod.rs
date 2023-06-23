@@ -295,7 +295,7 @@ impl<'a, E: Exfiltrator> IntoIterator for &'a mut SignalsInfo<E> {
     }
 }
 
-/// An infinit iterator of arriving signals.
+/// An infinite iterator of arriving signals.
 pub struct Forever<'a, E: Exfiltrator>(RefSignalIterator<'a, UnixStream, E>);
 
 impl<'a, E: Exfiltrator> Iterator for Forever<'a, E> {
