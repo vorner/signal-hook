@@ -1,3 +1,7 @@
+# 0.3.16
+
+* Fix compilation on OpenBSD (#147).
+
 # 0.3.15
 # signal-hook-registry-1.4.1
 
