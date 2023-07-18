@@ -1,3 +1,7 @@
+# 0.3.17
+
+* Fix race condition leading into a panic in SignalsInfo::forever (#148).
+
 # 0.3.16
 
 * Fix compilation on OpenBSD (#147).
