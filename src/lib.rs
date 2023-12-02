@@ -27,7 +27,7 @@
 //!
 //! # The goal of the library
 //!
-//! The aim is to subscriptions to signals a „structured“ resource, in a similar way memory
+//! The aim is to subscriptions to signals a "structured" resource, in a similar way memory
 //! allocation is ‒ parts of the program can independently subscribe and it's the same part of the
 //! program that can give them up, independently of what the other parts do. Therefore, it is
 //! possible to register multiple actions to the same signal.
