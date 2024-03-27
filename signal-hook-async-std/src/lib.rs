@@ -64,6 +64,8 @@ use signal_hook::iterator::exfiltrator::{Exfiltrator, SignalOnly};
 use async_io::Async;
 use futures_lite::io::AsyncRead;
 use futures_lite::stream::Stream;
+use futures_lite::StreamExt;
+use signal_hook::consts;
 
 /// An asynchronous [`Stream`] of arriving signals.
 ///
@@ -133,3 +135,21 @@ impl<E: Exfiltrator> Stream for SignalsInfo<E> {
 /// This one simply returns the signal numbers, while [`SignalsInfo`] can provide additional
 /// information.
 pub type Signals = SignalsInfo<SignalOnly>;
+
+/// Waits for the the process to receive a shutdown signal.
+/// Waits for any of SIGHUP, SIGINT, SIGQUIT, and SIGTERM.
+/// # Errors
+/// Returns `Err` after failing to register the signal handler.
+pub async fn wait_for_shutdown_signal() -> Result<(), String> {
+    let signals = [
+        consts::SIGHUP,
+        consts::SIGINT,
+        consts::SIGQUIT,
+        consts::SIGTERM,
+    ];
+    let mut signals = Signals::new(&signals)
+        .map_err(|e| format!("error setting up handler for signals {signals:?}: {e}"))?;
+    let _ = signals.next().await;
+    signals.handle().close();
+    Ok(())
+}

@@ -83,6 +83,9 @@ use signal_hook::iterator::exfiltrator::{Exfiltrator, SignalOnly};
 
 #[cfg(feature = "futures-v0_3")]
 use futures_core_0_3::Stream;
+#[cfg(feature = "convenience")]
+use futures_util::StreamExt;
+use signal_hook::consts;
 
 /// An asynchronous [`Stream`] of arriving signals.
 ///
@@ -155,4 +158,23 @@ impl<E: Exfiltrator> Stream for SignalsInfo<E> {
             PollResult::Err(error) => panic!("Unexpected error: {}", error),
         }
     }
+}
+
+#[cfg(feature = "convenience")]
+/// Waits for the the process to receive a shutdown signal.
+/// Waits for any of SIGHUP, SIGINT, SIGQUIT, and SIGTERM.
+/// # Errors
+/// Returns `Err` after failing to register the signal handler.
+pub async fn wait_for_shutdown_signal() -> Result<(), String> {
+    let signals = [
+        consts::SIGHUP,
+        consts::SIGINT,
+        consts::SIGQUIT,
+        consts::SIGTERM,
+    ];
+    let mut signals = Signals::new(&signals)
+        .map_err(|e| format!("error setting up handler for signals {signals:?}: {e}"))?;
+    let _ = signals.next().await;
+    signals.handle().close();
+    Ok(())
 }
