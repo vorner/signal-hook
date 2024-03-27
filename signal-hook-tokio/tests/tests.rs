@@ -2,13 +2,12 @@
 
 use futures::stream::StreamExt;
 
-use libc::SIGHUP;
 use std::convert::TryFrom;
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 
-use signal_hook::consts::SIGUSR1;
+use signal_hook::consts::{SIGHUP, SIGUSR1};
 use signal_hook::low_level::raise;
 use signal_hook_tokio::Signals;
 
