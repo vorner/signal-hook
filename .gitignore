@@ -2,3 +2,5 @@
 **/*.rs.bk
 tags
 .ccls-cache
+.idea
+Cargo.lock
