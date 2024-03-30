@@ -54,7 +54,7 @@
 //! thing. It can register for a set of signals and produce them one by one, in a blocking manner.
 //! You can reserve a thread for handling them as they come. If you want something asynchronous,
 //! there are adaptor crates for the most common asynchronous runtimes. The module also contains
-//! ways to build iterators that produce a bit more information that just the signal number.
+//! ways to build iterators that produce a bit more information than just the signal number.
 //!
 //! The [`flag`] module contains routines to set a flag based on incoming signals and to do
 //! certain actions inside the signal handlers based on the flags (the flags can also be
