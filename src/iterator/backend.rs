@@ -446,7 +446,7 @@ impl<SD, E: Exfiltrator> SignalIterator<SD, E> {
     /// [`PollResult::Pending`] and assume it will be called again at a later point in time.
     /// The callback may be called any number of times by this function.
     ///
-    /// If the iterator was closed by the [`close`][Handle::close] method of the associtated
+    /// If the iterator was closed by the [`close`][Handle::close] method of the associated
     /// [`Handle`] this method will return [`PollResult::Closed`].
     pub fn poll_signal<R, F>(&mut self, has_signals: &mut F) -> PollResult<E::Output>
     where
