@@ -150,6 +150,5 @@ pub async fn wait_for_shutdown_signal() -> Result<(), String> {
     let mut signals = Signals::new(&signals)
         .map_err(|e| format!("error setting up handler for signals {signals:?}: {e}"))?;
     let _ = signals.next().await;
-    signals.handle().close();
     Ok(())
 }
