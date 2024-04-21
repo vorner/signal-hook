@@ -1,3 +1,8 @@
+# signal-hook-registry-1.4.2
+
+* NQX support (experimental/not guaranteed to work) (#158)
+  - By disabling `SA_RESTART` on that platform, not supported there.
+
 # 0.3.17
 
 * Fix race condition leading into a panic in SignalsInfo::forever (#148).
