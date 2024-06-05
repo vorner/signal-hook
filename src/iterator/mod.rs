@@ -92,7 +92,7 @@ use self::exfiltrator::{Exfiltrator, SignalOnly};
 ///
 /// # Exfiltrators
 ///
-/// The [`SignalOnly]` provides only the signal number. There are further exfiltrators available in
+/// The [`SignalOnly`] provides only the signal number. There are further exfiltrators available in
 /// the [`exfiltrator`] module. Note that some of them are behind feature flags that need to be
 /// enabled.
 ///
