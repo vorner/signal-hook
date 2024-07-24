@@ -11,13 +11,15 @@
 //! * `support-v0_6` for sub module [`v0_6`]
 //! * `support-v0_7` for sub module [`v0_7`]
 //! * `support-v0_8` for sub module [`v0_8`]
+//! * `support-v0_8` for sub module [`v1_0`]
 //!
 //! See the specific sub modules for usage examples.
 
 #[cfg(any(
     feature = "support-v0_6",
     feature = "support-v0_7",
-    feature = "support-v0_8"
+    feature = "support-v0_8",
+    feature = "support-v1_0"
 ))]
 macro_rules! implement_signals_with_pipe {
     ($pipe:path) => {
@@ -92,6 +94,98 @@ macro_rules! implement_signals_with_pipe {
         /// one you want to use.
         pub type Signals = SignalsInfo<SignalOnly>;
     };
+}
+
+/// A module for integrating signal handling with the MIO 1.0 runtime.
+///
+/// This provides the [`Signals`][v1_0::Signals] struct as an abstraction
+/// which can be used with [`mio::Poll`][mio_1_0::Poll].
+///
+/// # Examples
+///
+/// ```rust
+/// # use mio_1_0 as mio;
+/// use std::io::{Error, ErrorKind};
+///
+/// use signal_hook::consts::signal::*;
+/// use signal_hook_mio::v1_0::Signals;
+///
+/// use mio::{Events, Poll, Interest, Token};
+///
+/// fn main() -> Result<(), Error> {
+///     let mut poll = Poll::new()?;
+///
+///     let mut signals = Signals::new(&[
+///         SIGTERM,
+/// #       SIGUSR1,
+///     ])?;
+///
+///     let signal_token = Token(0);
+///
+///     poll.registry().register(&mut signals, signal_token, Interest::READABLE)?;
+/// #   signal_hook::low_level::raise(SIGUSR1).unwrap(); // Just for terminating the example
+///
+///     let mut events = Events::with_capacity(10);
+///     'outer: loop {
+///         poll.poll(&mut events, None)
+///             .or_else(|e| if e.kind() == ErrorKind::Interrupted {
+///                 // We get interrupt when a signal happens inside poll. That's non-fatal, just
+///                 // retry.
+///                 events.clear();
+///                 Ok(())
+///             } else {
+///                 Err(e)
+///             })?;
+///         for event in events.iter() {
+///             match event.token() {
+///                 Token(0) => {
+///                     for signal in signals.pending() {
+///                         match signal {
+///                             SIGTERM => break 'outer,
+/// #                           SIGUSR1 => return Ok(()),
+///                             _ => unreachable!(),
+///                         }
+///                     }
+///                 },
+///                 _ => unreachable!("Register other sources and match for their tokens here"),
+///             }
+///         }
+///     }
+///
+///     Ok(())
+/// }
+/// ```
+#[cfg(feature = "support-v1_0")]
+pub mod v1_0 {
+    use mio::event::Source;
+    use mio::{Interest, Registry, Token};
+    use mio_1_0 as mio;
+
+    implement_signals_with_pipe!(mio::net::UnixStream);
+
+    impl Source for Signals {
+        fn register(
+            &mut self,
+            registry: &Registry,
+            token: Token,
+            interest: Interest,
+        ) -> Result<(), Error> {
+            self.0.get_read_mut().register(registry, token, interest)
+        }
+
+        fn reregister(
+            &mut self,
+            registry: &Registry,
+            token: Token,
+            interest: Interest,
+        ) -> Result<(), Error> {
+            self.0.get_read_mut().reregister(registry, token, interest)
+        }
+
+        fn deregister(&mut self, registry: &Registry) -> Result<(), Error> {
+            self.0.get_read_mut().deregister(registry)
+        }
+    }
 }
 
 /// A module for integrating signal handling with the MIO 0.8 runtime.
