@@ -661,6 +661,19 @@ dependencies = [
 ]
 
 [[package]]
+name = "mio"
+version = "1.0.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "4929e1f84c5e54c3ec6141cd5d8b5a5c055f031f80cf78f2072920173cb4d880"
+dependencies = [
+ "hermit-abi",
+ "libc",
+ "log",
+ "wasi",
+ "windows-sys 0.52.0",
+]
+
+[[package]]
 name = "mio-uds"
 version = "0.6.8"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1027,6 +1040,7 @@ dependencies = [
  "mio 0.6.23",
  "mio 0.7.14",
  "mio 0.8.11",
+ "mio 1.0.0",
  "mio-uds",
  "serial_test 0.5.1",
  "signal-hook",
