@@ -1,3 +1,7 @@
+# signal-hook-mio-0.2.4
+
+* Support for mio 1.0
+
 # signal-hook-registry-1.4.2
 
 * NQX support (experimental/not guaranteed to work) (#158)
