@@ -67,7 +67,7 @@
 //! too, this is just for convenience).
 //!
 //! And last, there is the [`low_level`] module. It contains routines to directly register and
-//! unregister arbitrary actions. Some of the patters in the above modules return a [`SigId`],
+//! unregister arbitrary actions. Some of the patterns in the above modules return a [`SigId`],
 //! which can be used with the [`low_level::unregister`] to remove the action. There are also some
 //! other utilities that are more suited to build other abstractions with than to use directly.
 //!
