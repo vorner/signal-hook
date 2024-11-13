@@ -13,6 +13,7 @@ extern "C" {
     fn sighook_signal_cause(info: &siginfo_t) -> ICause;
     fn sighook_signal_pid(info: &siginfo_t) -> pid_t;
     fn sighook_signal_uid(info: &siginfo_t) -> uid_t;
+    fn sighook_signal_status(info: &siginfo_t, has_status: &mut bool) -> c_int;
 }
 
 // Warning: must be in sync with the C code
@@ -66,6 +67,9 @@ pub struct Process {
 
     /// The user owning the process.
     pub uid: uid_t,
+
+    /// The exit status of the process, or the signal number that caused it to change state.
+    pub status: Option<c_int>,
 }
 
 impl Process {
@@ -78,9 +82,12 @@ impl Process {
      * and `si_uid` filled in.
      */
     unsafe fn extract(info: &siginfo_t) -> Self {
+        let mut has_status = false;
+        let status = sighook_signal_status(info, &mut has_status);
         Self {
             pid: sighook_signal_pid(info),
             uid: sighook_signal_uid(info),
+            status: has_status.then_some(status),
         }
     }
 }
