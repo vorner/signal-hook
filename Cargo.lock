@@ -1012,17 +1012,17 @@ dependencies = [
 
 [[package]]
 name = "signal-hook"
-version = "0.3.17"
+version = "0.4.0"
 dependencies = [
  "cc",
  "libc",
  "serial_test 0.7.0",
- "signal-hook-registry 1.4.2",
+ "signal-hook-registry 1.4.3",
 ]
 
 [[package]]
 name = "signal-hook-async-std"
-version = "0.2.2"
+version = "0.2.3"
 dependencies = [
  "async-io 1.13.0",
  "async-std",
@@ -1034,7 +1034,7 @@ dependencies = [
 
 [[package]]
 name = "signal-hook-mio"
-version = "0.2.4"
+version = "0.2.5"
 dependencies = [
  "libc",
  "mio 0.6.23",
@@ -1057,7 +1057,7 @@ dependencies = [
 
 [[package]]
 name = "signal-hook-registry"
-version = "1.4.2"
+version = "1.4.3"
 dependencies = [
  "libc",
  "signal-hook",
@@ -1065,7 +1065,7 @@ dependencies = [
 
 [[package]]
 name = "signal-hook-tokio"
-version = "0.3.1"
+version = "0.3.2"
 dependencies = [
  "futures",
  "futures-core",

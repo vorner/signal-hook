@@ -1,6 +1,6 @@
 [package]
 name = "signal-hook-registry"
-version = "1.4.2"
+version = "1.4.3"
 authors = [
     "Michal 'vorner' Vaner <vorner@vorner.cz>",
     "Masaki Hara <ackie.h.gmai@gmail.com>",
@@ -21,4 +21,4 @@ maintenance = { status = "actively-developed" }
 libc = "~0.2"
 
 [dev-dependencies]
-signal-hook = { version = "~0.3", path = ".." }
+signal-hook = { version = "~0.4", path = ".." }
