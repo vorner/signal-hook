@@ -73,6 +73,7 @@
 //!     println!("Happily terminating");
 //!     Ok(())
 //! }
+//! ```
 
 use std::io::{Error, ErrorKind};
 use std::os::unix::io::{AsRawFd, IntoRawFd, RawFd};
