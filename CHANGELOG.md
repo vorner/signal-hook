@@ -1,3 +1,7 @@
+# signal-hook-registry-1.4.3
+
+* Remove special-case for AIX (#169).
+
 # signal-hook-mio-0.2.4
 
 * Support for mio 1.0
