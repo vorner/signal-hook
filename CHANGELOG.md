@@ -1,3 +1,7 @@
+# signal-hook-registry-1.4.4
+
+* Get rid of a warning.
+
 # signal-hook-registry-1.4.3
 
 * Remove special-case for AIX (#169).

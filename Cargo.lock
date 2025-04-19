@@ -997,7 +997,7 @@ dependencies = [
  "cc",
  "libc",
  "serial_test 0.7.0",
- "signal-hook-registry 1.4.3",
+ "signal-hook-registry 1.4.4",
 ]
 
 [[package]]
@@ -1029,18 +1029,18 @@ dependencies = [
 [[package]]
 name = "signal-hook-registry"
 version = "1.4.3"
-dependencies = [
- "libc",
- "signal-hook",
-]
-
-[[package]]
-name = "signal-hook-registry"
-version = "1.4.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "c28b4eafe8a2d82f83559ef5941afff1ccba3da8e375c8f148efd75df181bf4f"
 dependencies = [
  "libc",
+]
+
+[[package]]
+name = "signal-hook-registry"
+version = "1.4.4"
+dependencies = [
+ "libc",
+ "signal-hook",
 ]
 
 [[package]]
@@ -1124,7 +1124,7 @@ dependencies = [
  "mio 1.0.3",
  "parking_lot 0.12.3",
  "pin-project-lite",
- "signal-hook-registry 1.4.3 (registry+https://github.com/rust-lang/crates.io-index)",
+ "signal-hook-registry 1.4.3",
  "socket2 0.5.9",
  "tokio-macros",
  "windows-sys 0.52.0",
