@@ -39,6 +39,10 @@
 //! require dependencies that don't build there, so tests need newer Rust version (they are run on
 //! stable).
 //!
+//! Note that this ancient version of rustc no longer compiles current versions of `libc`. If you
+//! want to use rustc this old, you need to force your dependency resolution to pick old enough
+//! version of `libc` (`0.2.156` was found to work, but newer ones may too).
+//!
 //! # Portability
 //!
 //! This crate includes a limited support for Windows, based on `signal`/`raise` in the CRT.
@@ -158,7 +162,23 @@ impl Slot {
     fn new(signal: libc::c_int) -> Result<Self, Error> {
         // C data structure, expected to be zeroed out.
         let mut new: libc::sigaction = unsafe { mem::zeroed() };
-        new.sa_sigaction = handler as usize;
+
+        // Note: AIX fixed their naming in libc 0.2.171.
+        //
+        // However, if we mandate that _for everyone_, other systems fail to compile on old Rust
+        // versions (eg. 1.26.0), because they are no longer able to compile this new libc.
+        //
+        // There doesn't seem to be a way to make Cargo force the dependency for only one target
+        // (it doesn't compile the ones it doesn't need, but it stills considers the other targets
+        // for version resolution).
+        // 
+        // Therefore, we let the user have freedom - if they want AIX, they can upgrade to new
+        // enough libc. If they want ancient rustc, they can force older versions of libc.
+        //
+        // See #169.
+
+        new.sa_sigaction = handler as usize; // If it doesn't compile on AIX, upgrade the libc dependency
+        
         // Android is broken and uses different int types than the rest (and different depending on
         // the pointer width). This converts the flags to the proper type no matter what it is on
         // the given platform.
