@@ -72,6 +72,7 @@ use std::io::Error;
 use std::mem;
 #[cfg(not(windows))]
 use std::ptr;
+use std::sync::atomic::{AtomicPtr, Ordering};
 // Once::new is now a const-fn. But it is not stable in all the rustc versions we want to support
 // yet.
 #[allow(deprecated)]
@@ -171,20 +172,20 @@ impl Slot {
         // There doesn't seem to be a way to make Cargo force the dependency for only one target
         // (it doesn't compile the ones it doesn't need, but it stills considers the other targets
         // for version resolution).
-        // 
+        //
         // Therefore, we let the user have freedom - if they want AIX, they can upgrade to new
         // enough libc. If they want ancient rustc, they can force older versions of libc.
         //
         // See #169.
 
         new.sa_sigaction = handler as usize; // If it doesn't compile on AIX, upgrade the libc dependency
-        
+
         // Android is broken and uses different int types than the rest (and different depending on
         // the pointer width). This converts the flags to the proper type no matter what it is on
         // the given platform.
         #[cfg(target_os = "nto")]
         let flags = 0;
-        // SA_RESTART is supported by qnx https://www.qnx.com/support/knowledgebase.html?id=50130000000SmiD 
+        // SA_RESTART is supported by qnx https://www.qnx.com/support/knowledgebase.html?id=50130000000SmiD
         #[cfg(not(target_os = "nto"))]
         let flags = libc::SA_RESTART;
         #[allow(unused_assignments)]
@@ -296,23 +297,30 @@ struct GlobalData {
     race_fallback: HalfLock<Option<Prev>>,
 }
 
-static mut GLOBAL_DATA: Option<GlobalData> = None;
+static GLOBAL_DATA: AtomicPtr<GlobalData> = AtomicPtr::new(ptr::null_mut());
 #[allow(deprecated)]
 static GLOBAL_INIT: Once = ONCE_INIT;
 
 impl GlobalData {
     fn get() -> &'static Self {
-        unsafe { GLOBAL_DATA.as_ref().unwrap() }
+        let data = GLOBAL_DATA.load(Ordering::Acquire);
+        // # Safety
+        //
+        // * The data actually does live forever - created by Box::into_raw.
+        // * It is _never_ modified (apart for interior mutability, but that one is fine).
+        unsafe { data.as_ref().expect("We shall be set up already") }
     }
     fn ensure() -> &'static Self {
-        GLOBAL_INIT.call_once(|| unsafe {
-            GLOBAL_DATA = Some(GlobalData {
+        GLOBAL_INIT.call_once(|| {
+            let data = Box::into_raw(Box::new(GlobalData {
                 data: HalfLock::new(SignalData {
                     signals: HashMap::new(),
                     next_id: 1,
                 }),
                 race_fallback: HalfLock::new(None),
-            });
+            }));
+            let old = GLOBAL_DATA.swap(data, Ordering::Release);
+            assert!(old.is_null());
         });
         Self::get()
     }
