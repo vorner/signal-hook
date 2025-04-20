@@ -70,7 +70,6 @@ use std::collections::hash_map::Entry;
 use std::collections::{BTreeMap, HashMap};
 use std::io::Error;
 use std::mem;
-#[cfg(not(windows))]
 use std::ptr;
 use std::sync::atomic::{AtomicPtr, Ordering};
 // Once::new is now a const-fn. But it is not stable in all the rustc versions we want to support

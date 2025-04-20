@@ -1,3 +1,7 @@
+# signal-hook-registry-1.4.5
+
+* Fix windows build (#174).
+
 # signal-hook-registry-1.4.4
 
 * Get rid of a warning.
