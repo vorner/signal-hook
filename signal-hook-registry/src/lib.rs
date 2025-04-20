@@ -297,7 +297,7 @@ struct GlobalData {
     race_fallback: HalfLock<Option<Prev>>,
 }
 
-static GLOBAL_DATA: AtomicPtr<GlobalData> = AtomicPtr::new(ptr::null_mut());
+static GLOBAL_DATA: AtomicPtr<GlobalData> = AtomicPtr::new(core::ptr::null_mut());
 #[allow(deprecated)]
 static GLOBAL_INIT: Once = ONCE_INIT;
 
