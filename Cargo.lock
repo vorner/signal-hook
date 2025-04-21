@@ -1004,9 +1004,9 @@ dependencies = [
 name = "signal-hook-async-std"
 version = "0.2.2"
 dependencies = [
- "async-io 1.13.0",
+ "async-io 2.3.2",
  "async-std",
- "futures-lite 1.13.0",
+ "futures-lite 2.3.0",
  "libc",
  "serial_test 0.5.1",
  "signal-hook",
