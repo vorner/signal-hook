@@ -1,3 +1,7 @@
+# signal-hook-async-std-0.3.0
+
+* Bump async-std to 0.2 (#172).
+
 # signal-hook-registry-1.4.5
 
 * Fix windows build (#174).
