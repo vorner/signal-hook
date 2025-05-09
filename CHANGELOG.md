@@ -1,3 +1,8 @@
+# signal-hook-1.3.18
+
+* Release the special-case removal of AIX for top-level signal-hook too (#169,
+  #176).
+
 # signal-hook-async-std-0.3.0
 
 * Bump async-std to 0.2 (#172).
