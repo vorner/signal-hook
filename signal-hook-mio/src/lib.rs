@@ -11,7 +11,7 @@
 //! * `support-v0_6` for sub module [`v0_6`]
 //! * `support-v0_7` for sub module [`v0_7`]
 //! * `support-v0_8` for sub module [`v0_8`]
-//! * `support-v0_8` for sub module [`v1_0`]
+//! * `support-v1_0` for sub module [`v1_0`]
 //!
 //! See the specific sub modules for usage examples.
 
