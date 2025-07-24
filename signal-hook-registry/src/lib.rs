@@ -462,18 +462,34 @@ const FORBIDDEN_IMPL: &[c_int] = &[SIGKILL, SIGSTOP, SIGILL, SIGFPE, SIGSEGV];
 ///
 /// # Safety
 ///
-/// This function is unsafe, because the `action` is run inside a signal handler. The set of
-/// functions allowed to be called from within is very limited (they are called async-signal-safe
-/// functions by POSIX). These specifically do *not* contain mutexes and memory
-/// allocation/deallocation. They *do* contain routines to terminate the program, to further
-/// manipulate signals (by the low-level functions, not by this library) and to read and write file
-/// descriptors. Calling program's own functions consisting only of these is OK, as is manipulating
-/// program's variables ‒ however, as the action can be called on any thread that does not have the
-/// given signal masked (by default no signal is masked on any thread), and mutexes are a no-go,
-/// this is harder than it looks like at first.
+/// This function is unsafe, because the `action` is run inside a signal handler. While Rust is
+/// somewhat vague about the consequences of such, it is reasonably to assume that similar
+/// restrictions as specified in C or C++ apply.
+///
+/// In particular:
+///
+/// * Calling any OS functions that are not async-signal-safe as specified as POSIX is not allowed.
+/// * Accessing globals or thread-locals without synchronization is not allowed (however, mutexes
+///   are not within the async-signal-safe functions, therefore the synchronization is limited to
+///   using atomics).
+///
+/// The underlying reason is, signals are asynchronous (they can happen at arbitrary time) and are
+/// run in context of arbitrary thread (with some limited control of at which thread they can run).
+/// As a consequence, things like mutexes are prone to deadlocks, memory allocators can likely
+/// contain mutexes and the compiler doesn't expect the interruption during optimizations.
+///
+/// Things that generally are part of the async-signal-safe set (though check specifically) are
+/// routines to terminate the program, to further manipulate signals (by the low-level functions,
+/// not by this library) and to read and write file descriptors. The async-signal-safety is
+/// transitive - that is, a function composed only from computations (with local variables or with
+/// variables accessed with proper synchronizations) and other async-signal-safe functions is also
+/// safe.
 ///
 /// As panicking from within a signal handler would be a panic across FFI boundary (which is
 /// undefined behavior), the passed handler must not panic.
+///
+/// Note that many innocently-looking functions do contain some of the forbidden routines (a lot of
+/// things lock or allocate).
 ///
 /// If you find these limitations hard to satisfy, choose from the helper functions in the
 /// [signal-hook](https://docs.rs/signal-hook) crate ‒ these provide safe interface to use some
