@@ -1,3 +1,7 @@
+# signal-hook-registry-1.4.6
+
+* Reword/improve the safety requirements docs for register (#178).
+
 # signal-hook-1.3.18
 
 * Release the special-case removal of AIX for top-level signal-hook too (#169,
