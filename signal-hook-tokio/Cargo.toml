@@ -31,7 +31,7 @@ tokio = { version = "~1", features = ["net"] }
 [dev-dependencies]
 tokio = { package = "tokio", version = "~1", features = ["full"] }
 futures = "~0.3"
-serial_test = "~0.5"
+serial_test = "~3"
 
 [package.metadata.docs.rs]
 all-features = true
