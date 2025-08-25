@@ -265,7 +265,7 @@ impl<E: Exfiltrator> SignalsInfo<E> {
     /// # Ok(())
     /// # }
     /// ```
-    pub fn forever(&mut self) -> Forever<E> {
+    pub fn forever(&mut self) -> Forever<'_, E> {
         Forever(RefSignalIterator::new(&mut self.0))
     }
 
