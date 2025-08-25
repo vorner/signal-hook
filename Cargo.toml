@@ -10,7 +10,7 @@ documentation = "https://docs.rs/signal-hook"
 repository = "https://github.com/vorner/signal-hook"
 readme = "README.md"
 keywords = ["signal", "unix", "daemon"]
-license = "Apache-2.0/MIT"
+license = "MIT OR Apache-2.0"
 edition = "2018"
 
 [badges]
