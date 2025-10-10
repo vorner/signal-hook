@@ -863,6 +863,7 @@ version = "0.3.1"
 dependencies = [
  "futures",
  "futures-core",
+ "futures-util",
  "libc",
  "serial_test",
  "signal-hook",
