@@ -1,3 +1,7 @@
+# signal-hook-mio-0.2.5
+
+* Allow mio 1.1
+
 # signal-hook-registry-1.4.6
 
 * Reword/improve the safety requirements docs for register (#178).

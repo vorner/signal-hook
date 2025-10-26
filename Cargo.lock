@@ -828,7 +828,7 @@ dependencies = [
 
 [[package]]
 name = "signal-hook-mio"
-version = "0.2.4"
+version = "0.2.5"
 dependencies = [
  "libc",
  "mio 0.6.23",
