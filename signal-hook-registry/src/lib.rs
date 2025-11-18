@@ -246,9 +246,13 @@ impl Prev {
     fn execute(&self, sig: c_int) {
         let fptr = self.info;
         if fptr != 0 && fptr != SIG_DFL && fptr != SIG_IGN {
+            // `sighandler_t` is an integer type. Transmuting it directly from an integer to a
+            // function pointer seems dubious w.r.t. pointer provenance -- at least Miri complains
+            // about it. Casting to a raw pointer first side-steps the issue.
+            let fptr = fptr as *mut ();
             // FFI ‒ calling the original signal handler.
             unsafe {
-                let action = mem::transmute::<usize, extern "C" fn(c_int)>(fptr);
+                let action = mem::transmute::<*mut (), extern "C" fn(c_int)>(fptr);
                 action(sig);
             }
         }
@@ -258,6 +262,10 @@ impl Prev {
     unsafe fn execute(&self, sig: c_int, info: *mut siginfo_t, data: *mut c_void) {
         let fptr = self.info.sa_sigaction;
         if fptr != 0 && fptr != libc::SIG_DFL && fptr != libc::SIG_IGN {
+            // `sa_sigaction` is usually stored as integer type. Transmuting it directly from an
+            // integer to a function pointer seems dubious w.r.t. pointer provenance -- at least
+            // Miri complains about it. Casting to a raw pointer first side-steps the issue.
+            let fptr = fptr as *mut ();
             // Android is broken and uses different int types than the rest (and different
             // depending on the pointer width). This converts the flags to the proper type no
             // matter what it is on the given platform.
@@ -269,11 +277,11 @@ impl Prev {
             let mut siginfo = self.info.sa_flags;
             siginfo = libc::SA_SIGINFO as _;
             if self.info.sa_flags & siginfo == 0 {
-                let action = mem::transmute::<usize, extern "C" fn(c_int)>(fptr);
+                let action = mem::transmute::<*mut (), extern "C" fn(c_int)>(fptr);
                 action(sig);
             } else {
                 type SigAction = extern "C" fn(c_int, *mut siginfo_t, *mut c_void);
-                let action = mem::transmute::<usize, SigAction>(fptr);
+                let action = mem::transmute::<*mut (), SigAction>(fptr);
                 action(sig, info, data);
             }
         }
