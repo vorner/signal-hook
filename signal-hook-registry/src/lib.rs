@@ -179,14 +179,14 @@ impl Slot {
 
         new.sa_sigaction = handler as usize; // If it doesn't compile on AIX, upgrade the libc dependency
 
-        // Android is broken and uses different int types than the rest (and different depending on
-        // the pointer width). This converts the flags to the proper type no matter what it is on
-        // the given platform.
         #[cfg(target_os = "nto")]
         let flags = 0;
         // SA_RESTART is supported by qnx https://www.qnx.com/support/knowledgebase.html?id=50130000000SmiD
         #[cfg(not(target_os = "nto"))]
         let flags = libc::SA_RESTART;
+        // Android is broken and uses different int types than the rest (and different depending on
+        // the pointer width). This converts the flags to the proper type no matter what it is on
+        // the given platform.
         #[allow(unused_assignments)]
         let mut siginfo = flags;
         siginfo = libc::SA_SIGINFO as _;
