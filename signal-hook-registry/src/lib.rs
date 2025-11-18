@@ -65,9 +65,8 @@
 extern crate libc;
 
 mod half_lock;
+mod vec_map;
 
-use std::collections::hash_map::Entry;
-use std::collections::{BTreeMap, HashMap};
 use std::io::Error;
 use std::mem;
 use std::ptr;
@@ -89,6 +88,7 @@ use libc::{SIGFPE, SIGILL, SIGKILL, SIGSEGV, SIGSTOP};
 use libc::{SIGFPE, SIGILL, SIGSEGV};
 
 use half_lock::HalfLock;
+use vec_map::{Entry, VecMap};
 
 // These constants are not defined in the current version of libc, but it actually
 // exists in Windows CRT.
@@ -140,9 +140,8 @@ type Action = Fn(&siginfo_t) + Send + Sync;
 #[derive(Clone)]
 struct Slot {
     prev: Prev,
-    // We use BTreeMap here, because we want to run the actions in the order they were inserted.
-    // This works, because the ActionIds are assigned in an increasing order.
-    actions: BTreeMap<ActionId, Arc<Action>>,
+    // Actions are stored and executed in the order they were registered.
+    actions: VecMap<ActionId, Arc<Action>>,
 }
 
 impl Slot {
@@ -154,7 +153,7 @@ impl Slot {
         }
         Ok(Slot {
             prev: Prev { signal, info: old },
-            actions: BTreeMap::new(),
+            actions: VecMap::new(),
         })
     }
 
@@ -200,14 +199,14 @@ impl Slot {
         }
         Ok(Slot {
             prev: Prev { signal, info: old },
-            actions: BTreeMap::new(),
+            actions: VecMap::new(),
         })
     }
 }
 
 #[derive(Clone)]
 struct SignalData {
-    signals: HashMap<c_int, Slot>,
+    signals: VecMap<c_int, Slot>,
     next_id: u128,
 }
 
@@ -324,7 +323,7 @@ impl GlobalData {
         GLOBAL_INIT.call_once(|| {
             let data = Box::into_raw(Box::new(GlobalData {
                 data: HalfLock::new(SignalData {
-                    signals: HashMap::new(),
+                    signals: VecMap::new(),
                     next_id: 1,
                 }),
                 race_fallback: HalfLock::new(None),
