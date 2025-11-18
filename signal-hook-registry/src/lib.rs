@@ -181,7 +181,7 @@ impl Slot {
 
         #[cfg(target_os = "nto")]
         let flags = 0;
-        // SA_RESTART is supported by qnx https://www.qnx.com/support/knowledgebase.html?id=50130000000SmiD
+        // SA_RESTART is not supported by qnx https://www.qnx.com/support/knowledgebase.html?id=50130000000SmiD
         #[cfg(not(target_os = "nto"))]
         let flags = libc::SA_RESTART;
         // Android is broken and uses different int types than the rest (and different depending on
