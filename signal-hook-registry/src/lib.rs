@@ -177,7 +177,7 @@ impl Slot {
         //
         // See #169.
 
-        new.sa_sigaction = handler as usize; // If it doesn't compile on AIX, upgrade the libc dependency
+        new.sa_sigaction = handler as *const () as usize; // If it doesn't compile on AIX, upgrade the libc dependency
 
         #[cfg(target_os = "nto")]
         let flags = 0;
