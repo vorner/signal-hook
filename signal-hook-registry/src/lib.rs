@@ -542,7 +542,7 @@ pub unsafe fn register<F>(signal: c_int, action: F) -> Result<SigId, Error>
 where
     F: Fn() + Sync + Send + 'static,
 {
-    register_sigaction_impl(signal, move |_: &_| action())
+    register_sigaction_impl(signal, Arc::new(move |_: &_| action()))
 }
 
 /// Register a signal action.
@@ -559,13 +559,10 @@ pub unsafe fn register_sigaction<F>(signal: c_int, action: F) -> Result<SigId, E
 where
     F: Fn(&siginfo_t) + Sync + Send + 'static,
 {
-    register_sigaction_impl(signal, action)
+    register_sigaction_impl(signal, Arc::new(action))
 }
 
-unsafe fn register_sigaction_impl<F>(signal: c_int, action: F) -> Result<SigId, Error>
-where
-    F: Fn(&siginfo_t) + Sync + Send + 'static,
-{
+unsafe fn register_sigaction_impl(signal: c_int, action: Arc<Action>) -> Result<SigId, Error> {
     assert!(
         !FORBIDDEN.contains(&signal),
         "Attempted to register forbidden signal {}",
@@ -587,7 +584,7 @@ pub unsafe fn register_signal_unchecked<F>(signal: c_int, action: F) -> Result<S
 where
     F: Fn() + Sync + Send + 'static,
 {
-    register_unchecked_impl(signal, move |_: &_| action())
+    register_unchecked_impl(signal, Arc::new(move |_: &_| action()))
 }
 
 /// Register a signal action without checking for forbidden signals.
@@ -608,15 +605,11 @@ pub unsafe fn register_unchecked<F>(signal: c_int, action: F) -> Result<SigId, E
 where
     F: Fn(&siginfo_t) + Sync + Send + 'static,
 {
-    register_unchecked_impl(signal, action)
+    register_unchecked_impl(signal, Arc::new(action))
 }
 
-unsafe fn register_unchecked_impl<F>(signal: c_int, action: F) -> Result<SigId, Error>
-where
-    F: Fn(&siginfo_t) + Sync + Send + 'static,
-{
+unsafe fn register_unchecked_impl(signal: c_int, action: Arc<Action>) -> Result<SigId, Error> {
     let globals = GlobalData::ensure();
-    let action = Arc::from(action);
 
     let mut lock = globals.data.write();
 
