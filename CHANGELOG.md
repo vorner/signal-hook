@@ -1,3 +1,7 @@
+# signal-hook-registry-1.4.7
+
+* Using earlier monopolization to reduce binary size (#190).
+
 # signal-hook-mio-0.2.5
 
 * Allow mio 1.1

@@ -1,6 +1,6 @@
 [package]
 name = "signal-hook-registry"
-version = "1.4.6"
+version = "1.4.7"
 authors = [
     "Michal 'vorner' Vaner <vorner@vorner.cz>",
     "Masaki Hara <ackie.h.gmai@gmail.com>",
