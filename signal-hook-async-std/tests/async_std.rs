@@ -13,7 +13,7 @@ use signal_hook_async_std::Signals;
 async fn next_returns_recieved_signal() {
     let _lock = serial_test::lock();
 
-    let mut signals = Signals::new(&[SIGUSR1]).unwrap();
+    let mut signals = Signals::new([SIGUSR1]).unwrap();
     raise(SIGUSR1).unwrap();
 
     let signal = signals.next().await;
@@ -26,7 +26,7 @@ async fn next_returns_recieved_signal() {
 async fn close_signal_stream() {
     let _lock = serial_test::lock();
 
-    let mut signals = Signals::new(&[SIGUSR1]).unwrap();
+    let mut signals = Signals::new([SIGUSR1]).unwrap();
     signals.handle().close();
 
     let result = signals.next().await;
@@ -44,7 +44,7 @@ async fn delayed() {
         recieved.store(true, Ordering::SeqCst);
     }
 
-    let signals = Signals::new(&[SIGUSR1]).unwrap();
+    let signals = Signals::new([SIGUSR1]).unwrap();
     let recieved = Arc::new(AtomicBool::new(false));
 
     let signals_task = async_std::task::spawn(get_signal(signals, Arc::clone(&recieved)));

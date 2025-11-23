@@ -94,7 +94,7 @@ fn signals_block_wait() {
             // so we just try to wait multiple times ‒ if they *all* return right away, it is
             // broken.
             for _ in 0..10 {
-                for _ in signals.wait() {
+                if signals.wait().next().is_some() {
                     if finish.load(Ordering::SeqCst) {
                         // Asked to terminate at the end of the thread. Do so (but without
                         // signalling the receipt).

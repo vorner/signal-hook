@@ -17,7 +17,7 @@ use libc::c_int;
 fn mio_wakeup() {
     let _lock = serial_test::lock();
 
-    let mut signals = Signals::new(&[SIGUSR1]).unwrap();
+    let mut signals = Signals::new([SIGUSR1]).unwrap();
     let mut poll = Poll::new().unwrap();
     let token = Token(0);
     poll.registry()

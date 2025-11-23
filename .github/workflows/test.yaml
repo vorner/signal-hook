@@ -177,7 +177,8 @@ jobs:
         uses: Swatinem/rust-cache@v1
 
       - name: Run clippy linter
-        run: cargo clippy --all --all-features --tests -- -D clippy::all -D warnings
+        # cfg(clippy) is necessary in signal-hook-registry because Rust 1.26 doesn't support allow(clippy::foo)
+        run: cargo clippy --all --all-features --tests -- -D clippy::all -D warnings -A clippy::unnecessary_clippy_cfg
 
   # There's bunch of platforms that have some weird quirks (or we don't know
   # that they don't). While fully compiling and testing on them is a bit of a
