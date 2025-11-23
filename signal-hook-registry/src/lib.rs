@@ -340,7 +340,7 @@ impl GlobalData {
 
 #[cfg(windows)]
 extern "C" fn handler(sig: c_int) {
-    let _errno = ErrnoGuard::new();
+    // let _errno = ErrnoGuard::new();
 
     if sig != SIGFPE {
         // Windows CRT `signal` resets handler every time, unless for SIGFPE.
