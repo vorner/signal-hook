@@ -175,11 +175,9 @@ jobs:
       matrix:
         target:
           - x86_64-unknown-linux-musl
-          # - x86_64-pc-solaris
           - x86_64-linux-android
           - aarch64-linux-android
           - arm-linux-androideabi
-          # - mips-unknown-linux-musl
           - s390x-unknown-linux-gnu
           - x86_64-unknown-netbsd
           - x86_64-unknown-freebsd
