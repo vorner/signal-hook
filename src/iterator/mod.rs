@@ -1,10 +1,9 @@
 //! An iterator over incoming signals.
 //!
-//! This provides a higher abstraction over the signals, providing
-//! the [`SignalsInfo`] structure which is able to iterate over the
-//! incoming signals. The structure is parametrized by an
-//! [`Exfiltrator`][self::exfiltrator::Exfiltrator], which specifies what information is returned
-//! for each delivered signal. Note that some exfiltrators are behind a feature flag.
+//! This provides a higher abstraction over the signals, providing the [`SignalsInfo`] structure
+//! which is able to iterate over the incoming signals. The structure is parametrized by an
+//! [`Exfiltrator`], which specifies what information is returned for each delivered signal. Note
+//! that some exfiltrators are behind a feature flag.
 //!
 //! The [`Signals`] is a type alias for the common case when it is enough to get the signal number.
 //!
