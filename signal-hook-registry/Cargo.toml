@@ -20,6 +20,7 @@ maintenance = { status = "actively-developed" }
 
 [dependencies]
 libc = "^0.2"
+errno = ">=0.2, <0.4"
 
 [dev-dependencies]
 signal-hook = { version = "~0.3", path = ".." }

@@ -62,6 +62,7 @@
 //! [signal-hook]: https://docs.rs/signal-hook
 //! [async-signal-safe]: http://www.man7.org/linux/man-pages/man7/signal-safety.7.html
 
+extern crate errno;
 extern crate libc;
 
 mod half_lock;
@@ -78,6 +79,7 @@ use std::sync::atomic::{AtomicPtr, Ordering};
 use std::sync::ONCE_INIT;
 use std::sync::{Arc, Once};
 
+use errno::Errno;
 #[cfg(not(windows))]
 use libc::{c_int, c_void, sigaction, siginfo_t};
 #[cfg(windows)]
@@ -338,6 +340,8 @@ impl GlobalData {
 
 #[cfg(windows)]
 extern "C" fn handler(sig: c_int) {
+    let _errno = ErrnoGuard::new();
+
     if sig != SIGFPE {
         // Windows CRT `signal` resets handler every time, unless for SIGFPE.
         // Reregister the handler to retain maximal compatibility.
@@ -385,6 +389,8 @@ extern "C" fn handler(sig: c_int) {
 // cfg_attr is needed because the `allow(clippy::lint)` syntax was added in Rust 1.31
 #[cfg_attr(clippy, allow(clippy::incompatible_msrv))]
 extern "C" fn handler(sig: c_int, info: *mut siginfo_t, data: *mut c_void) {
+    let _errno = ErrnoGuard::new();
+
     let globals = GlobalData::get();
     let fallback = globals.race_fallback.read();
     let sigdata = globals.data.read();
@@ -419,6 +425,20 @@ extern "C" fn handler(sig: c_int, info: *mut siginfo_t, data: *mut c_void) {
         }
         // else -> probably should not happen, but races with other threads are possible so
         // better safe
+    }
+}
+
+struct ErrnoGuard(Errno);
+
+impl ErrnoGuard {
+    fn new() -> Self {
+        ErrnoGuard(errno::errno())
+    }
+}
+
+impl Drop for ErrnoGuard {
+    fn drop(&mut self) {
+        errno::set_errno(self.0);
     }
 }
 
@@ -833,5 +853,39 @@ mod tests {
         assert!(unregister(signal));
         // The next time unregistering does nothing and tells us so.
         assert!(!unregister(signal));
+    }
+
+    /// Check that errno is not clobbered by the signal handler.
+    #[test]
+    fn save_restore_errno() {
+        const MAGIC_ERRNO: i32 = 123456;
+        let status = Arc::new(AtomicUsize::new(0));
+        let action = {
+            let status = Arc::clone(&status);
+            move || {
+                errno::set_errno(Errno(MAGIC_ERRNO));
+                status.store(1, Ordering::Relaxed);
+            }
+        };
+        unsafe {
+            register(SIGUSR1, action).unwrap();
+            libc::raise(SIGUSR1);
+        }
+        for _ in 0..10 {
+            // We can't rule out that the raise() or sleep() clobbers errno, so this test isn't
+            // waterproof. But it fails at least sometimes on some platforms if the errno
+            // save/restore is removed. We assert both before and after the sleep for good luck.
+            assert!(errno::errno().0 != MAGIC_ERRNO);
+            thread::sleep(Duration::from_millis(100));
+            assert!(errno::errno().0 != MAGIC_ERRNO);
+            let current = status.load(Ordering::Relaxed);
+            match current {
+                // Not yet
+                0 => continue,
+                // Good, we are done with the correct result
+                _ if current == 1 => return,
+                _ => panic!("Wrong status value {}", current),
+            }
+        }
     }
 }
