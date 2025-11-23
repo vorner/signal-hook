@@ -54,6 +54,7 @@ jobs:
           RUST_VERSION: ${{ matrix.rust }}
           OS: ${{ matrix.os }}
         run: ./ci-check.sh
+        shell: bash
 
   rustfmt:
     name: Check formatting
