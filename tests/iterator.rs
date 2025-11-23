@@ -13,8 +13,6 @@ use signal_hook::consts::{SIGUSR1, SIGUSR2};
 use signal_hook::iterator::{Handle, Signals};
 use signal_hook::low_level::raise;
 
-use serial_test::serial;
-
 fn send_sigusr1() {
     raise(SIGUSR1).unwrap();
 }
@@ -50,8 +48,9 @@ macro_rules! assert_no_signals {
 }
 
 #[test]
-#[serial]
 fn forever_terminates_when_closed() {
+    let _lock = serial_test::lock();
+
     let (mut signals, controller) = setup_for_sigusr2();
 
     // Detect early terminations.
@@ -82,8 +81,9 @@ fn forever_terminates_when_closed() {
 // iterator, possibly), .forever() would do a busy loop.
 // flag)
 #[test]
-#[serial]
 fn signals_block_wait() {
+    let _lock = serial_test::lock();
+
     let mut signals = Signals::new(&[SIGUSR2]).unwrap();
     let (s, r) = mpsc::channel();
     let finish = Arc::new(AtomicBool::new(false));
@@ -147,8 +147,9 @@ fn signals_block_wait() {
 }
 
 #[test]
-#[serial]
 fn pending_doesnt_block() {
+    let _lock = serial_test::lock();
+
     let (mut signals, _) = setup_for_sigusr2();
 
     let mut recieved_signals = signals.pending();
@@ -157,8 +158,9 @@ fn pending_doesnt_block() {
 }
 
 #[test]
-#[serial]
 fn wait_returns_recieved_signals() {
+    let _lock = serial_test::lock();
+
     let (mut signals, _) = setup_for_sigusr2();
     send_sigusr2();
 
@@ -168,8 +170,9 @@ fn wait_returns_recieved_signals() {
 }
 
 #[test]
-#[serial]
 fn forever_returns_recieved_signals() {
+    let _lock = serial_test::lock();
+
     let (mut signals, _) = setup_for_sigusr2();
     send_sigusr2();
 
@@ -179,8 +182,9 @@ fn forever_returns_recieved_signals() {
 }
 
 #[test]
-#[serial]
 fn wait_doesnt_block_when_closed() {
+    let _lock = serial_test::lock();
+
     let (mut signals, controller) = setup_for_sigusr2();
     controller.close();
 
@@ -190,8 +194,9 @@ fn wait_doesnt_block_when_closed() {
 }
 
 #[test]
-#[serial]
 fn wait_unblocks_when_closed() {
+    let _lock = serial_test::lock();
+
     let (mut signals, controller) = setup_without_any_signals();
 
     let thread = thread::spawn(move || {
@@ -204,8 +209,9 @@ fn wait_unblocks_when_closed() {
 }
 
 #[test]
-#[serial]
 fn forever_doesnt_block_when_closed() {
+    let _lock = serial_test::lock();
+
     let (mut signals, controller) = setup_for_sigusr2();
     controller.close();
 
@@ -215,8 +221,9 @@ fn forever_doesnt_block_when_closed() {
 }
 
 #[test]
-#[serial]
 fn add_signal_after_creation() {
+    let _lock = serial_test::lock();
+
     let (mut signals, _) = setup_without_any_signals();
     signals.add_signal(SIGUSR1).unwrap();
 
@@ -226,8 +233,9 @@ fn add_signal_after_creation() {
 }
 
 #[test]
-#[serial]
 fn delayed_signal_consumed() {
+    let _lock = serial_test::lock();
+
     let (mut signals, _) = setup_for_sigusr2();
     signals.add_signal(SIGUSR1).unwrap();
 
@@ -245,16 +253,18 @@ fn delayed_signal_consumed() {
 }
 
 #[test]
-#[serial]
 fn is_closed_initially_returns_false() {
+    let _lock = serial_test::lock();
+
     let (_, controller) = setup_for_sigusr2();
 
     assert!(!controller.is_closed());
 }
 
 #[test]
-#[serial]
 fn is_closed_returns_true_when_closed() {
+    let _lock = serial_test::lock();
+
     let (_, controller) = setup_for_sigusr2();
     controller.close();
 

@@ -8,11 +8,11 @@ use signal_hook::consts::SIGUSR1;
 use signal_hook::low_level::raise;
 use signal_hook_async_std::Signals;
 
-use serial_test::serial;
-
 #[async_std::test]
-#[serial]
+#[allow(clippy::await_holding_lock)]
 async fn next_returns_recieved_signal() {
+    let _lock = serial_test::lock();
+
     let mut signals = Signals::new(&[SIGUSR1]).unwrap();
     raise(SIGUSR1).unwrap();
 
@@ -22,8 +22,10 @@ async fn next_returns_recieved_signal() {
 }
 
 #[async_std::test]
-#[serial]
+#[allow(clippy::await_holding_lock)]
 async fn close_signal_stream() {
+    let _lock = serial_test::lock();
+
     let mut signals = Signals::new(&[SIGUSR1]).unwrap();
     signals.handle().close();
 
@@ -33,8 +35,10 @@ async fn close_signal_stream() {
 }
 
 #[async_std::test]
-#[serial]
+#[allow(clippy::await_holding_lock)]
 async fn delayed() {
+    let _lock = serial_test::lock();
+
     async fn get_signal(mut signals: Signals, recieved: Arc<AtomicBool>) {
         signals.next().await;
         recieved.store(true, Ordering::SeqCst);

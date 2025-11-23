@@ -27,7 +27,7 @@ signal-hook = { version = "~0.3", path = ".." }
 
 [dev-dependencies]
 async-std = { version = "~1", features = ["attributes"] }
-serial_test = "~3"
+serial_test = { path = "../serial_test" }
 
 [package.metadata.docs.rs]
 all-features = true

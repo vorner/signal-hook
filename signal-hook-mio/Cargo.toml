@@ -36,7 +36,7 @@ mio-uds = { version = "~0.6", optional = true}
 
 [dev-dependencies]
 mio-0_7 = { package = "mio", version = "~0.7", features = ["os-util", "os-poll", "uds"] }
-serial_test = "~3"
+serial_test = { path = "../serial_test" }
 
 [package.metadata.docs.rs]
 all-features = true
