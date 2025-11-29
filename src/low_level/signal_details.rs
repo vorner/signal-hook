@@ -1,7 +1,9 @@
 //! Providing auxiliary information for signals.
 
 use std::io::Error;
+#[cfg(not(windows))]
 use std::mem;
+#[cfg(not(windows))]
 use std::ptr;
 
 use libc::{c_int, EINVAL};
@@ -13,6 +15,7 @@ use crate::low_level;
 
 #[derive(Clone, Copy, Debug)]
 enum DefaultKind {
+    #[cfg(not(windows))]
     Ignore,
     #[cfg(not(windows))]
     Stop,
@@ -176,6 +179,7 @@ pub fn emulate_default_handler(signal: c_int) -> Result<(), Error> {
         .map(|d| d.default_kind)
         .ok_or_else(|| Error::from_raw_os_error(EINVAL))?;
     match kind {
+        #[cfg(not(windows))]
         DefaultKind::Ignore => Ok(()),
         #[cfg(not(windows))]
         DefaultKind::Stop => low_level::raise(SIGSTOP),
