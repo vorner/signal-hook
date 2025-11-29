@@ -211,7 +211,7 @@
 //! terminal on `SIGTSTP` (CTRL+Z, curses-based applications should do something like this).
 //!
 //! ```rust
-//! # #[cfg(feature = "extended-siginfo")] pub mod test {
+//! # #[cfg(all(feature = "extended-siginfo", not(windows)))] pub mod test {
 //! use std::io::Error;
 //! use std::sync::Arc;
 //! use std::sync::atomic::AtomicBool;
@@ -315,7 +315,7 @@
 //! }
 //! # }
 //! # fn main() {
-//! # #[cfg(feature = "extended-siginfo")] test::main().unwrap();
+//! # #[cfg(all(feature = "extended-siginfo", not(windows)))] test::main().unwrap();
 //! # }
 //! ```
 //!

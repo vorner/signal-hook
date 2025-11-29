@@ -102,7 +102,9 @@ const DETAILS: &[Details] = &[
 ///
 /// ```
 /// # use signal_hook::low_level::signal_name;
+/// # #[cfg(not(windows))] {
 /// assert_eq!("SIGKILL", signal_name(9).unwrap());
+/// # }
 /// assert!(signal_name(142).is_none());
 /// ```
 pub fn signal_name(signal: c_int) -> Option<&'static str> {
