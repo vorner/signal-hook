@@ -148,7 +148,7 @@ struct Slot {
 impl Slot {
     #[cfg(windows)]
     fn new(signal: libc::c_int) -> Result<Self, Error> {
-        let old = unsafe { libc::signal(signal, handler as sighandler_t) };
+        let old = unsafe { libc::signal(signal, handler as *const () as sighandler_t) };
         if old == SIG_ERR {
             return Err(Error::last_os_error());
         }
@@ -344,7 +344,7 @@ extern "C" fn handler(sig: c_int) {
         // Problems:
         // - It's racy. But this is inevitably racy in Windows.
         // - Interacts poorly with handlers outside signal-hook-registry.
-        let old = unsafe { libc::signal(sig, handler as sighandler_t) };
+        let old = unsafe { libc::signal(sig, handler as *const () as sighandler_t) };
         if old == SIG_ERR {
             // MSDN doesn't describe which errors might occur,
             // but we can tell from the Linux manpage that
