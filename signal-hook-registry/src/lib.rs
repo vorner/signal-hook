@@ -88,7 +88,7 @@ use libc::{SIGFPE, SIGILL, SIGKILL, SIGSEGV, SIGSTOP};
 use libc::{SIGFPE, SIGILL, SIGSEGV};
 
 use half_lock::HalfLock;
-use vec_map::{Entry, VecMap};
+use vec_map::VecMap;
 
 // These constants are not defined in the current version of libc, but it actually
 // exists in Windows CRT.
@@ -630,34 +630,32 @@ unsafe fn register_unchecked_impl(signal: c_int, action: Arc<Action>) -> Result<
     let id = ActionId(sigdata.next_id);
     sigdata.next_id += 1;
 
-    match sigdata.signals.entry(signal) {
-        Entry::Occupied(mut occupied) => {
-            assert!(occupied.get_mut().actions.insert(id, action).is_none());
-        }
-        Entry::Vacant(place) => {
-            // While the sigaction/signal exchanges the old one atomically, we are not able to
-            // atomically store it somewhere a signal handler could read it. That poses a race
-            // condition where we could lose some signals delivered in between changing it and
-            // storing it.
-            //
-            // Therefore we first store the old one in the fallback storage. The fallback only
-            // covers the cases where the slot is not yet active and becomes "inert" after that,
-            // even if not removed (it may get overwritten by some other signal, but for that the
-            // mutex in globals.data must be unlocked here - and by that time we already stored the
-            // slot.
-            //
-            // And yes, this still leaves a short race condition when some other thread could
-            // replace the signal handler and we would be calling the outdated one for a short
-            // time, until we install the slot.
-            globals
-                .race_fallback
-                .write()
-                .store(Some(Prev::detect(signal)?));
+    if sigdata.signals.contains(&signal) {
+        let slot = sigdata.signals.get_mut(&signal).unwrap();
+        assert!(slot.actions.insert(id, action).is_none());
+    } else {
+        // While the sigaction/signal exchanges the old one atomically, we are not able to
+        // atomically store it somewhere a signal handler could read it. That poses a race
+        // condition where we could lose some signals delivered in between changing it and
+        // storing it.
+        //
+        // Therefore we first store the old one in the fallback storage. The fallback only
+        // covers the cases where the slot is not yet active and becomes "inert" after that,
+        // even if not removed (it may get overwritten by some other signal, but for that the
+        // mutex in globals.data must be unlocked here - and by that time we already stored the
+        // slot.
+        //
+        // And yes, this still leaves a short race condition when some other thread could
+        // replace the signal handler and we would be calling the outdated one for a short
+        // time, until we install the slot.
+        globals
+            .race_fallback
+            .write()
+            .store(Some(Prev::detect(signal)?));
 
-            let mut slot = Slot::new(signal)?;
-            slot.actions.insert(id, action);
-            place.insert(slot);
-        }
+        let mut slot = Slot::new(signal)?;
+        slot.actions.insert(id, action);
+        sigdata.signals.insert(signal, slot);
     }
 
     lock.store(sigdata);

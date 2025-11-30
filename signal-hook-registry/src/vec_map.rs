@@ -29,6 +29,10 @@ impl<K: Eq, V> VecMap<K, V> {
         None
     }
 
+    pub fn contains(&self, key: &K) -> bool {
+        self.find(key).is_some()
+    }
+
     pub fn get(&self, key: &K) -> Option<&V> {
         match self.find(key) {
             Some(i) => Some(&self.0[i].1),
@@ -58,42 +62,7 @@ impl<K: Eq, V> VecMap<K, V> {
         }
     }
 
-    pub fn entry(&mut self, key: K) -> Entry<'_, K, V> {
-        match self.find(&key) {
-            Some(i) => Entry::Occupied(OccupiedEntry {
-                place: &mut self.0[i],
-            }),
-            None => Entry::Vacant(VacantEntry { map: self, key }),
-        }
-    }
-
     pub fn values(&self) -> impl Iterator<Item = &V> {
         self.0.iter().map(|kv| &kv.1)
-    }
-}
-
-pub enum Entry<'a, K: 'a, V: 'a> {
-    Occupied(OccupiedEntry<'a, K, V>),
-    Vacant(VacantEntry<'a, K, V>),
-}
-
-pub struct OccupiedEntry<'a, K: 'a, V: 'a> {
-    place: &'a mut (K, V),
-}
-
-impl<'a, K, V> OccupiedEntry<'a, K, V> {
-    pub fn get_mut(&mut self) -> &mut V {
-        &mut self.place.1
-    }
-}
-
-pub struct VacantEntry<'a, K: 'a, V: 'a> {
-    map: &'a mut VecMap<K, V>,
-    key: K,
-}
-
-impl<'a, K, V> VacantEntry<'a, K, V> {
-    pub fn insert(self, value: V) {
-        self.map.0.push((self.key, value));
     }
 }
