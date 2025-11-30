@@ -23,3 +23,8 @@ libc = "^0.2"
 
 [dev-dependencies]
 signal-hook = { version = "~0.3", path = ".." }
+
+[lints.clippy]
+# actually necessary because Rust 1.26 doesn't support allow(clippy::foo) syntax
+unnecessary_clippy_cfg = "allow"
+
