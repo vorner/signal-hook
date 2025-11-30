@@ -1,7 +1,9 @@
 //! Providing auxiliary information for signals.
 
 use std::io::Error;
+#[cfg(not(windows))]
 use std::mem;
+#[cfg(not(windows))]
 use std::ptr;
 
 use libc::{c_int, EINVAL};
@@ -13,6 +15,7 @@ use crate::low_level;
 
 #[derive(Clone, Copy, Debug)]
 enum DefaultKind {
+    #[cfg(not(windows))]
     Ignore,
     #[cfg(not(windows))]
     Stop,
@@ -99,7 +102,9 @@ const DETAILS: &[Details] = &[
 ///
 /// ```
 /// # use signal_hook::low_level::signal_name;
+/// # #[cfg(not(windows))] {
 /// assert_eq!("SIGKILL", signal_name(9).unwrap());
+/// # }
 /// assert!(signal_name(142).is_none());
 /// ```
 pub fn signal_name(signal: c_int) -> Option<&'static str> {
@@ -176,6 +181,7 @@ pub fn emulate_default_handler(signal: c_int) -> Result<(), Error> {
         .map(|d| d.default_kind)
         .ok_or_else(|| Error::from_raw_os_error(EINVAL))?;
     match kind {
+        #[cfg(not(windows))]
         DefaultKind::Ignore => Ok(()),
         #[cfg(not(windows))]
         DefaultKind::Stop => low_level::raise(SIGSTOP),

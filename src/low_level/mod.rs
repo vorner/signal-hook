@@ -8,12 +8,13 @@ use libc::c_int;
 
 #[cfg(feature = "channel")]
 #[cfg_attr(docsrs, doc(cfg(feature = "channel")))]
+#[clippy::msrv = "1.34"]
 pub mod channel;
 #[cfg(not(windows))]
 #[cfg_attr(docsrs, doc(cfg(not(windows))))]
 pub mod pipe;
-#[cfg(feature = "extended-siginfo-raw")]
-#[cfg_attr(docsrs, doc(cfg(feature = "extended-siginfo-raw")))]
+#[cfg(all(feature = "extended-siginfo-raw", not(windows)))]
+#[cfg_attr(docsrs, doc(cfg(all(feature = "extended-siginfo-raw", not(windows)))))]
 pub mod siginfo;
 mod signal_details;
 

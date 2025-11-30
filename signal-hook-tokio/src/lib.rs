@@ -5,8 +5,7 @@
 
 //! A crate for integrating signal handling with the Tokio runtime.
 //!
-//! This provides the [`Signals`][Signals] struct which acts as a
-//! [`Stream`] of signals.
+//! This provides the [`Signals`] struct which acts as a [`Stream`] of signals.
 //!
 //! Note that the `futures-v0_3` feature of this crate must be
 //! enabled for `Signals` to implement the `Stream` trait.

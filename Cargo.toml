@@ -12,6 +12,7 @@ readme = "README.md"
 keywords = ["signal", "unix", "daemon"]
 license = "MIT OR Apache-2.0"
 edition = "2018"
+rust-version = "1.31"
 
 [badges]
 maintenance = { status = "actively-developed" }
@@ -31,6 +32,7 @@ members = [
     "signal-hook-tokio",
     "signal-hook-mio",
     "signal-hook-async-std",
+    "serial_test",
 ]
 
 [dependencies]
@@ -38,7 +40,7 @@ libc = "^0.2"
 signal-hook-registry = { version = "^1.4", path = "signal-hook-registry" }
 
 [dev-dependencies]
-serial_test = "^3"
+serial_test = { path = "./serial_test" }
 
 [package.metadata.docs.rs]
 all-features = true

@@ -90,8 +90,8 @@
 //! * Interaction with other signal-handling libraries is limited. If signal-hook finds an existing
 //!   handler present, it chain-calls it from the signal it installs and assumes other libraries
 //!   would do the same, but that's everything that can be done to make it work with libraries not
-//!   based on [`signal-hook-registry`](https://lib.rs/signal-hook-registry)
-//!   (the backend of this crate).
+//!   based on [`signal-hook-registry`](https://docs.rs/signal-hook-registry) (the backend of this
+//!   crate).
 //! * The above chaining contains a race condition in multi-threaded programs, where the previous
 //!   handler might not get called if it is received during the registration process. This is
 //!   handled (at least on non-windows platforms) on the same thread where the registration
@@ -130,8 +130,7 @@
 //! program's threads.
 //!
 //! By the way, if you do want to modify the signal mask (or do other Unix-specific magic), the
-//! [nix](https://lib.rs/crates/nix) crate offers safe interface to many low-level functions,
-//! including
+//! [nix](https://docs.rs/nix) crate offers safe interface to many low-level functions, including
 //! [`pthread_sigmask`](https://docs.rs/nix/0.11.0/nix/sys/signal/fn.pthread_sigmask.html).
 //!
 //! # Portability
@@ -212,7 +211,7 @@
 //! terminal on `SIGTSTP` (CTRL+Z, curses-based applications should do something like this).
 //!
 //! ```rust
-//! # #[cfg(feature = "extended-siginfo")] pub mod test {
+//! # #[cfg(all(feature = "extended-siginfo", not(windows)))] pub mod test {
 //! use std::io::Error;
 //! use std::sync::Arc;
 //! use std::sync::atomic::AtomicBool;
@@ -316,7 +315,7 @@
 //! }
 //! # }
 //! # fn main() {
-//! # #[cfg(feature = "extended-siginfo")] test::main().unwrap();
+//! # #[cfg(all(feature = "extended-siginfo", not(windows)))] test::main().unwrap();
 //! # }
 //! ```
 //!
@@ -351,6 +350,7 @@
 pub mod flag;
 #[cfg(all(not(windows), feature = "iterator"))]
 #[cfg_attr(docsrs, doc(cfg(all(not(windows), feature = "iterator"))))]
+#[clippy::msrv = "1.36"]
 pub mod iterator;
 pub mod low_level;
 
