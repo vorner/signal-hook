@@ -12,6 +12,7 @@ readme = "README.md"
 repository = "https://github.com/vorner/signal-hook"
 keywords = ["signal", "unix", "daemon"]
 license = "MIT OR Apache-2.0"
+rust-version = "1.26"
 
 [badges]
 travis-ci = { repository = "vorner/signal-hook" }
@@ -22,3 +23,8 @@ libc = "^0.2"
 
 [dev-dependencies]
 signal-hook = { version = "~0.3", path = ".." }
+
+[lints.clippy]
+# actually necessary because Rust 1.26 doesn't support allow(clippy::foo) syntax
+unnecessary_clippy_cfg = "allow"
+

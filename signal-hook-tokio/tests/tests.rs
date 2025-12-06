@@ -10,12 +10,12 @@ use signal_hook::consts::SIGUSR1;
 use signal_hook::low_level::raise;
 use signal_hook_tokio::Signals;
 
-use serial_test::serial;
-
 #[tokio::test]
-#[serial]
+#[allow(clippy::await_holding_lock)]
 async fn next_returns_recieved_signal() {
-    let mut signals = Signals::new(&[SIGUSR1]).unwrap();
+    let _lock = serial_test::lock();
+
+    let mut signals = Signals::new([SIGUSR1]).unwrap();
     raise(SIGUSR1).unwrap();
 
     let signal = signals.next().await;
@@ -24,9 +24,11 @@ async fn next_returns_recieved_signal() {
 }
 
 #[tokio::test]
-#[serial]
+#[allow(clippy::await_holding_lock)]
 async fn close_signal_stream() {
-    let mut signals = Signals::new(&[SIGUSR1]).unwrap();
+    let _lock = serial_test::lock();
+
+    let mut signals = Signals::new([SIGUSR1]).unwrap();
     signals.handle().close();
 
     let result = signals.next().await;
@@ -35,14 +37,16 @@ async fn close_signal_stream() {
 }
 
 #[tokio::test]
-#[serial]
+#[allow(clippy::await_holding_lock)]
 async fn delayed() {
+    let _lock = serial_test::lock();
+
     async fn get_signal(mut signals: Signals, recieved: Arc<AtomicBool>) {
         signals.next().await;
         recieved.store(true, Ordering::SeqCst);
     }
 
-    let signals = Signals::new(&[SIGUSR1]).unwrap();
+    let signals = Signals::new([SIGUSR1]).unwrap();
     let recieved = Arc::new(AtomicBool::new(false));
 
     let signals_task = tokio::spawn(get_signal(signals, Arc::clone(&recieved)));

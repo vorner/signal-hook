@@ -10,13 +10,12 @@ use signal_hook::consts::{SIGUSR1, SIGUSR2};
 use signal_hook::low_level::raise;
 use signal_hook_mio::v0_6::Signals;
 
-use serial_test::serial;
-
 use libc::c_int;
 
 #[test]
-#[serial]
 fn mio_wakeup() {
+    let _lock = serial_test::lock();
+
     let mut signals = Signals::new(&[SIGUSR1]).unwrap();
     let token = Token(0);
     let poll = Poll::new().unwrap();
@@ -45,8 +44,9 @@ fn mio_wakeup() {
 }
 
 #[test]
-#[serial]
 fn mio_multiple_signals() {
+    let _lock = serial_test::lock();
+
     let mut signals = Signals::new(&[SIGUSR1, SIGUSR2]).unwrap();
     let poll = Poll::new().unwrap();
     let token = Token(0);
@@ -76,8 +76,9 @@ fn mio_multiple_signals() {
 }
 
 #[test]
-#[serial]
 fn mio_parallel_multiple() {
+    let _lock = serial_test::lock();
+
     let mut signals = Signals::new(&[SIGUSR1]).unwrap();
     let poll = Poll::new().unwrap();
     let token = Token(0);

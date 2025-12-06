@@ -267,7 +267,7 @@ mod tests {
         #[cfg(not(windows))]
         let signal = register(SIGUSR1, Arc::clone(&flag)).unwrap();
         #[cfg(windows)]
-        let signal = register(crate::SIGTERM, Arc::clone(&flag)).unwrap();
+        let signal = register(SIGTERM, Arc::clone(&flag)).unwrap();
         self_signal();
         assert!(wait_flag(&flag));
         // But stops working after it is unregistered.

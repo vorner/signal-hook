@@ -148,7 +148,7 @@ struct Slot {
 impl Slot {
     #[cfg(windows)]
     fn new(signal: libc::c_int) -> Result<Self, Error> {
-        let old = unsafe { libc::signal(signal, handler as sighandler_t) };
+        let old = unsafe { libc::signal(signal, handler as *const () as sighandler_t) };
         if old == SIG_ERR {
             return Err(Error::last_os_error());
         }
@@ -259,6 +259,9 @@ impl Prev {
     }
 
     #[cfg(not(windows))]
+    // libc re-exports the core::ffi::c_void on rustc >= 1.30, else defines its own type
+    // cfg_attr is needed because the `allow(clippy::lint)` syntax was added in Rust 1.31
+    #[cfg_attr(clippy, allow(clippy::incompatible_msrv))]
     unsafe fn execute(&self, sig: c_int, info: *mut siginfo_t, data: *mut c_void) {
         let fptr = self.info.sa_sigaction;
         if fptr != 0 && fptr != libc::SIG_DFL && fptr != libc::SIG_IGN {
@@ -341,7 +344,7 @@ extern "C" fn handler(sig: c_int) {
         // Problems:
         // - It's racy. But this is inevitably racy in Windows.
         // - Interacts poorly with handlers outside signal-hook-registry.
-        let old = unsafe { libc::signal(sig, handler as sighandler_t) };
+        let old = unsafe { libc::signal(sig, handler as *const () as sighandler_t) };
         if old == SIG_ERR {
             // MSDN doesn't describe which errors might occur,
             // but we can tell from the Linux manpage that
@@ -378,6 +381,9 @@ extern "C" fn handler(sig: c_int) {
 }
 
 #[cfg(not(windows))]
+// libc re-exports the core::ffi::c_void on rustc >= 1.30, else defines its own type
+// cfg_attr is needed because the `allow(clippy::lint)` syntax was added in Rust 1.31
+#[cfg_attr(clippy, allow(clippy::incompatible_msrv))]
 extern "C" fn handler(sig: c_int, info: *mut siginfo_t, data: *mut c_void) {
     let globals = GlobalData::get();
     let fallback = globals.race_fallback.read();

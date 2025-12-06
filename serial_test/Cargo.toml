@@ -1,0 +1,8 @@
+[package]
+name = "serial_test"
+version = "0.1.0"
+
+[dependencies]
+# pinned version because this is only a dev-dependency of the actually published
+# crates, needed for being able to run tests on Rust 1.40
+lazy_static = "=1.5.0"
