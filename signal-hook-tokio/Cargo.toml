@@ -12,6 +12,7 @@ readme = "README.md"
 repository = "https://github.com/vorner/signal-hook"
 keywords = ["signal", "unix", "tokio"]
 license = "MIT OR Apache-2.0"
+include.workspace = true
 
 edition = "2018"
 
