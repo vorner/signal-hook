@@ -13,6 +13,7 @@ keywords = ["signal", "unix", "daemon"]
 license = "MIT OR Apache-2.0"
 edition = "2018"
 rust-version = "1.31"
+include = ["CHANGELOG.md", "LICENSE-MIT", "LICENSE-APACHE", "README.md", "build.rs", "src/**/*.rs"]
 
 [badges]
 maintenance = { status = "actively-developed" }
