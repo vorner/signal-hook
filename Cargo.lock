@@ -826,6 +826,7 @@ dependencies = [
 name = "signal-hook-registry"
 version = "1.4.7"
 dependencies = [
+ "errno",
  "libc",
  "signal-hook",
 ]

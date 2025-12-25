@@ -12,6 +12,7 @@ rm -f Cargo.lock
 if [ "$RUST_VERSION" = 1.36.0 ] || [ "$RUST_VERSION" = 1.40.0 ] ; then
 	sed -i -e 's/libc = "^0.2"/libc = "=0.2.156"/' Cargo.toml
 	sed -i -e 's/cc = { version = "^1"/cc = { version = "=1.0.79"/' Cargo.toml
+	sed -i -e 's/errno = ">=0.2, <0.4"/errno = "0.2"/' signal-hook-registry/Cargo.toml
 fi
 
 cargo build --all --exclude signal-hook-async-std --exclude signal-hook-tokio
