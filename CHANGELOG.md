@@ -1,3 +1,7 @@
+# signal-hook-registry-1.4.8
+
+* Restore errno on signal handler exit (#194, #191).
+
 # signal-hook-registry-1.4.7
 
 * Using earlier monopolization to reduce binary size (#190).

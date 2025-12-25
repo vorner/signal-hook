@@ -784,7 +784,7 @@ dependencies = [
  "cc",
  "libc",
  "serial_test",
- "signal-hook-registry 1.4.7",
+ "signal-hook-registry 1.4.8",
 ]
 
 [[package]]
@@ -824,7 +824,7 @@ dependencies = [
 
 [[package]]
 name = "signal-hook-registry"
-version = "1.4.7"
+version = "1.4.8"
 dependencies = [
  "errno",
  "libc",
