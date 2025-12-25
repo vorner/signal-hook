@@ -14,7 +14,7 @@ keywords = ["signal", "unix", "mio"]
 license = "MIT OR Apache-2.0"
 
 edition = "2018"
-rust-version = "1.36"
+rust-version = "1.66"
 
 [badges]
 travis-ci = { repository = "vorner/signal-hook" }

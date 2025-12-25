@@ -350,7 +350,6 @@
 pub mod flag;
 #[cfg(all(not(windows), feature = "iterator"))]
 #[cfg_attr(docsrs, doc(cfg(all(not(windows), feature = "iterator"))))]
-#[clippy::msrv = "1.36"]
 pub mod iterator;
 pub mod low_level;
 

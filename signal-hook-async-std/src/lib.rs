@@ -92,7 +92,7 @@ impl<E: Exfiltrator> SignalsInfo<E> {
         S: Borrow<c_int>,
     {
         let (read, write) = Async::<UnixStream>::pair()?;
-        let inner = SignalDelivery::with_pipe(read, write, exfiltrator, signals)?;
+        let inner = SignalDelivery::with_pipe(read, write.into_inner()?, exfiltrator, signals)?;
         Ok(Self(OwningSignalIterator::new(inner)))
     }
 

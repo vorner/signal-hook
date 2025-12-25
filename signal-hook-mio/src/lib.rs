@@ -25,6 +25,7 @@ macro_rules! implement_signals_with_pipe {
     ($pipe:path) => {
         use std::borrow::Borrow;
         use std::io::Error;
+        use std::os::fd::{FromRawFd, IntoRawFd, OwnedFd};
 
         use signal_hook::iterator::backend::{self, SignalDelivery};
         use signal_hook::iterator::exfiltrator::{Exfiltrator, SignalOnly};
@@ -61,7 +62,10 @@ macro_rules! implement_signals_with_pipe {
                 S: Borrow<c_int>,
             {
                 let (read, write) = Pipe::pair()?;
-                let delivery = SignalDelivery::with_pipe(read, write, exfiltrator, signals)?;
+                // For mio 1.0 we could use OwnedFd::from, but older mio versions don't have that
+                // due to their lower MSRV, so we need to go through RawFd.
+                let write_fd = unsafe { OwnedFd::from_raw_fd(write.into_raw_fd()) };
+                let delivery = SignalDelivery::with_pipe(read, write_fd, exfiltrator, signals)?;
                 Ok(Self(delivery))
             }
 

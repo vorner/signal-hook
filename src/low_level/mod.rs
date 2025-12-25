@@ -8,7 +8,6 @@ use libc::c_int;
 
 #[cfg(feature = "channel")]
 #[cfg_attr(docsrs, doc(cfg(feature = "channel")))]
-#[clippy::msrv = "1.34"]
 pub mod channel;
 #[cfg(not(windows))]
 #[cfg_attr(docsrs, doc(cfg(not(windows))))]

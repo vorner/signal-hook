@@ -73,7 +73,7 @@ fn cleanup_inside_signal() {
 #[test]
 fn cleanup_after_signal() {
     fn hook() {
-        let mut signals = signal_hook::iterator::Signals::new(&[libc::SIGTERM]).unwrap();
+        let mut signals = signal_hook::iterator::Signals::new([libc::SIGTERM]).unwrap();
         assert_eq!(Some(SIGTERM), signals.into_iter().next());
         flag::register_conditional_shutdown(SIGTERM, 0, Arc::new(AtomicBool::new(true))).unwrap();
     }

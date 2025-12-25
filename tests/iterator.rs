@@ -22,13 +22,13 @@ fn send_sigusr2() {
 }
 
 fn setup_without_any_signals() -> (Signals, Handle) {
-    let signals = Signals::new(&[]).unwrap();
+    let signals = Signals::new(&[] as &[i32]).unwrap();
     let controller = signals.handle();
     (signals, controller)
 }
 
 fn setup_for_sigusr2() -> (Signals, Handle) {
-    let signals = Signals::new(&[SIGUSR2]).unwrap();
+    let signals = Signals::new([SIGUSR2]).unwrap();
     let controller = signals.handle();
     (signals, controller)
 }
@@ -84,7 +84,7 @@ fn forever_terminates_when_closed() {
 fn signals_block_wait() {
     let _lock = serial_test::lock();
 
-    let mut signals = Signals::new(&[SIGUSR2]).unwrap();
+    let mut signals = Signals::new([SIGUSR2]).unwrap();
     let (s, r) = mpsc::channel();
     let finish = Arc::new(AtomicBool::new(false));
     let thread_id = thread::spawn({

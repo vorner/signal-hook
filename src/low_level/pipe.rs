@@ -76,7 +76,8 @@
 //! ```
 
 use std::io::{Error, ErrorKind};
-use std::os::unix::io::{AsRawFd, IntoRawFd, RawFd};
+use std::os::fd::{AsFd, BorrowedFd, OwnedFd};
+use std::os::unix::io::AsRawFd;
 
 use libc::{self, c_int};
 
@@ -94,7 +95,7 @@ pub(crate) enum WakeMethod {
 }
 
 struct WakeFd {
-    fd: RawFd,
+    fd: OwnedFd,
     method: WakeMethod,
 }
 
@@ -102,37 +103,38 @@ impl WakeFd {
     /// Sets close on exec and nonblock on the inner file descriptor.
     fn set_flags(&self) -> Result<(), Error> {
         unsafe {
-            let flags = libc::fcntl(self.as_raw_fd(), libc::F_GETFL, 0);
+            let flags = libc::fcntl(self.fd.as_raw_fd(), libc::F_GETFL, 0);
             if flags == -1 {
                 return Err(Error::last_os_error());
             }
             let flags = flags | libc::O_NONBLOCK | libc::O_CLOEXEC;
-            if libc::fcntl(self.as_raw_fd(), libc::F_SETFL, flags) == -1 {
+            if libc::fcntl(self.fd.as_raw_fd(), libc::F_SETFL, flags) == -1 {
                 return Err(Error::last_os_error());
             }
         }
         Ok(())
     }
+
     fn wake(&self) {
-        wake(self.fd, self.method);
+        wake(self.fd.as_fd(), self.method);
     }
 }
 
-impl AsRawFd for WakeFd {
-    fn as_raw_fd(&self) -> RawFd {
-        self.fd
+impl AsFd for WakeFd {
+    fn as_fd(&self) -> BorrowedFd<'_> {
+        self.fd.as_fd()
     }
 }
 
 impl Drop for WakeFd {
     fn drop(&mut self) {
         unsafe {
-            libc::close(self.fd);
+            libc::close(self.fd.as_raw_fd());
         }
     }
 }
 
-pub(crate) fn wake(pipe: RawFd, method: WakeMethod) {
+pub(crate) fn wake(pipe: BorrowedFd<'_>, method: WakeMethod) {
     unsafe {
         // This writes some data into the pipe.
         //
@@ -146,8 +148,8 @@ pub(crate) fn wake(pipe: RawFd, method: WakeMethod) {
         //   woken up, so not fitting another letter in it is fine.
         let data = b"X" as *const _ as *const _;
         match method {
-            WakeMethod::Write => libc::write(pipe, data, 1),
-            WakeMethod::Send => libc::send(pipe, data, 1, MSG_NOWAIT),
+            WakeMethod::Write => libc::write(pipe.as_raw_fd(), data, 1),
+            WakeMethod::Send => libc::send(pipe.as_raw_fd(), data, 1, MSG_NOWAIT),
         };
     }
 }
@@ -175,8 +177,8 @@ pub(crate) fn wake(pipe: RawFd, method: WakeMethod) {
 ///   on the socket type, this might wake the read end with an empty message).
 /// * If it is not possible, the [`O_NONBLOCK`][libc::O_NONBLOCK] will be set on the file
 ///   descriptor and [`write`][libc::write] will be used instead.
-pub fn register_raw(signal: c_int, pipe: RawFd) -> Result<SigId, Error> {
-    let res = unsafe { libc::send(pipe, &[] as *const _, 0, MSG_NOWAIT) };
+pub fn register_raw(signal: c_int, pipe: OwnedFd) -> Result<SigId, Error> {
+    let res = unsafe { libc::send(pipe.as_raw_fd(), &[] as *const _, 0, MSG_NOWAIT) };
     let fd = match (res, Error::last_os_error().kind()) {
         (0, _) | (-1, ErrorKind::WouldBlock) => WakeFd {
             fd: pipe,
@@ -205,14 +207,15 @@ pub fn register_raw(signal: c_int, pipe: RawFd) -> Result<SigId, Error> {
 /// See [`register_raw`] for further details.
 pub fn register<P>(signal: c_int, pipe: P) -> Result<SigId, Error>
 where
-    P: IntoRawFd + 'static,
+    P: Into<OwnedFd> + 'static,
 {
-    register_raw(signal, pipe.into_raw_fd())
+    register_raw(signal, pipe.into())
 }
 
 #[cfg(test)]
 mod tests {
     use std::io::Read;
+    use std::os::fd::FromRawFd;
     use std::os::unix::net::{UnixDatagram, UnixStream};
 
     use super::*;
@@ -256,7 +259,7 @@ mod tests {
     fn register_with_pipe() -> Result<(), Error> {
         let mut fds = [0; 2];
         unsafe { assert_eq!(0, libc::pipe(fds.as_mut_ptr())) };
-        register_raw(libc::SIGUSR1, fds[1])?;
+        register_raw(libc::SIGUSR1, unsafe { OwnedFd::from_raw_fd(fds[1]) })?;
         wakeup();
         let mut buff = [0; 1];
         unsafe { assert_eq!(1, libc::read(fds[0], buff.as_mut_ptr() as *mut _, 1)) }
