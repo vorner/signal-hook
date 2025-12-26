@@ -1,4 +1,8 @@
-# 0.4
+# 0.4.1
+
+* Don't pin specific dependency versions accidentally.
+
+# 0.4.0
 
 * Changed the `low_level::pipe` to look `OwnedFd` instead of `IntoRawFd`, to
   enforce ownership of the file descriptor (#196).

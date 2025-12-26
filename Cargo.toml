@@ -1,6 +1,6 @@
 [package]
 name = "signal-hook"
-version = "0.4.0"
+version = "0.4.1"
 authors = [
     "Michal 'vorner' Vaner <vorner@vorner.cz>",
     "Thomas Himmelstoss <thimm@posteo.de>",
@@ -36,7 +36,7 @@ members = [
 ]
 
 [dependencies]
-libc = "=0.2.156"
+libc = "^0.2"
 signal-hook-registry = { version = "^1.4", path = "signal-hook-registry" }
 
 [dev-dependencies]
@@ -47,4 +47,4 @@ all-features = true
 rustdoc-args = ["--cfg", "docsrs"]
 
 [build-dependencies]
-cc = { version = "=1.0.79", optional = true }
+cc = { version = "^1", optional = true }
