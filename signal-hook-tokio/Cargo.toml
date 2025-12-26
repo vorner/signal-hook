@@ -24,7 +24,7 @@ futures-v0_3 = ["futures-core-0_3"]
 
 [dependencies]
 libc = "~0.2"
-signal-hook = { version = "~0.3", path = ".." }
+signal-hook = { version = "~0.4", path = ".." }
 futures-core-0_3 = { package = "futures-core", version = "~0.3", optional = true }
 tokio = { version = "~1", features = ["net"] }
 
