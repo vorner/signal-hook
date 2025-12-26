@@ -1,3 +1,8 @@
+# 0.4
+
+* Changed the `low_level::pipe` to look `OwnedFd` instead of `IntoRawFd`, to
+  enforce ownership of the file descriptor (#196).
+
 # signal-hook-registry-1.4.8
 
 * Restore errno on signal handler exit (#194, #191).

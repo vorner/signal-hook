@@ -28,7 +28,7 @@ support-v1_0 = ["mio-1_0"]
 
 [dependencies]
 libc = "~0.2"
-signal-hook = { version = "~0.3", path = ".." }
+signal-hook = { version = "~0.4", path = ".." }
 mio-1_0 = { package = "mio", version = "1.0", features = ["net", "os-ext"], optional = true }
 mio-0_8 = { package = "mio", version = "~0.8", features = ["net", "os-ext"], optional = true }
 mio-0_7 = { package = "mio", version = "~0.7", features = ["os-util", "uds"], optional = true }

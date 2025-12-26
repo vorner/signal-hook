@@ -792,7 +792,7 @@ dependencies = [
 
 [[package]]
 name = "signal-hook"
-version = "0.3.18"
+version = "0.4.0"
 dependencies = [
  "cc",
  "libc",
