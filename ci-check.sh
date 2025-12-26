@@ -9,7 +9,7 @@ set -ex
 
 rm -f Cargo.lock
 
-if [ "$RUST_VERSION" = 1.36.0 ] || [ "$RUST_VERSION" = 1.40.0 ] ; then
+if [ "$RUST_VERSION" = 1.36.0 ] || [ "$RUST_VERSION" = 1.40.0 ] || [ "$RUST_VERSION" = 1.66.0 ] ; then
 	sed -i -e 's/libc = "^0.2"/libc = "=0.2.156"/' Cargo.toml
 	sed -i -e 's/cc = { version = "^1"/cc = { version = "=1.0.79"/' Cargo.toml
 	sed -i -e 's/errno = ">=0.2, <0.4"/errno = "0.2"/' signal-hook-registry/Cargo.toml
@@ -21,6 +21,10 @@ if [ "$RUST_VERSION" = 1.36.0 ] ; then
 	exit
 fi
 
+if [ "$RUST_VERSION" = 1.66.0 ] ; then
+	mv Cargo.lock.old Cargo.lock
+fi
+
 if [ "$OS" = "windows-latest" ] || [ "$RUST_VERSION" = 1.40.0 ]; then
 	# The async support crates rely on the iterator module
 	# which isn't available for windows. So exclude them
@@ -28,6 +32,8 @@ if [ "$OS" = "windows-latest" ] || [ "$RUST_VERSION" = 1.40.0 ]; then
 
 	# Also, some dependencies of the runtimes don't like 1.40.
 	EXCLUDE_FROM_BUILD="--exclude signal-hook-mio --exclude signal-hook-tokio --exclude signal-hook-async-std"
+elif [ "$RUST_VERSION" = 1.66.0 ] ; then
+	EXCLUDE_FROM_BUILD="--exclude signal-hook-mio"
 else
 	EXCLUDE_FROM_BUILD=""
 fi

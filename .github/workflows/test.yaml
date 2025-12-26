@@ -24,16 +24,9 @@ jobs:
           - stable
           - beta
           - nightly
-          # Introduction of self: Arc<..>, needed for the iterator module
-          - 1.36.0
-          # Introduction of non_exhaustive, used at certain exfiltrators
-          - 1.40.0
-        exclude:
-          # macos-latest is aarch64, old Rust doesn't know that target
-          - os: macos-latest
-            rust: 1.36.0
-          - os: macos-latest
-            rust: 1.40.0
+          # Introduced the OwnedFd
+          # (current MRSV)
+          - 1.66.0
 
     runs-on: ${{ matrix.os }}
 
@@ -95,7 +88,7 @@ jobs:
           done
 
   ancient-registry:
-    name: Check compilation of signal-hook-registry on 1.26.0
+    name: Check compilation of signal-hook-registry on old compilers
     strategy:
       matrix:
         os:
@@ -103,6 +96,9 @@ jobs:
           - windows-latest
           # no macos-latest because that's aarch64 and old Rust lacks that target
           # no macos-15-intel because of weird linker errors
+        rust:
+          - 1.26.0
+          - 1.31.0
     runs-on: ${{ matrix.os }}
     steps:
       - name: checkout
@@ -110,8 +106,8 @@ jobs:
 
       - name: Install Rust
         run: |
-          rustup toolchain install 1.26.0 --profile minimal
-          rustup default 1.26.0
+          rustup toolchain add ${{ matrix.rust }} --profile minimal
+          rustup default ${{ matrix.rust }}
 
       - name: Check compilation
         run: |
@@ -121,34 +117,6 @@ jobs:
           sed -i -e 's/libc = "^0.2"/libc = "=0.2.156"/' Cargo.toml
           sed -i -e 's/errno = ">=0.2, <0.4"/errno = "0.2"/' Cargo.toml
           cargo check
-
-  ancient:
-    name: Check compilation on 1.31.0
-    strategy:
-      matrix:
-        os:
-          - ubuntu-latest
-          - windows-latest
-          # no macos-latest because that's aarch64 and old Rust lacks that target
-          # no macos-15-intel because of weird linker errors
-    runs-on: ${{ matrix.os }}
-    steps:
-      - name: checkout
-        uses: actions/checkout@v2
-
-      - name: Install Rust
-        run: |
-          rustup toolchain update 1.31.0 --profile minimal
-          rustup default 1.31.0
-
-      - name: Check compilation
-        run: |
-          rm Cargo.lock
-          sed -i -e 's/libc = "^0.2"/libc = "=0.2.156"/' Cargo.toml
-          sed -i -e 's/errno = ">=0.2, <0.4"/errno = "0.2"/' signal-hook-registry/Cargo.toml
-          cargo update
-          cargo check --no-default-features
-
 
   clippy:
     name: Clippy lints
