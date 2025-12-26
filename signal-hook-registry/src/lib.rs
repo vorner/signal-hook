@@ -743,8 +743,6 @@ pub fn unregister_signal(signal: c_int) -> bool {
 mod tests {
     use std::sync::atomic::{AtomicUsize, Ordering};
     use std::sync::Arc;
-    use std::thread;
-    use std::time::Duration;
 
     #[cfg(not(windows))]
     use libc::{pid_t, SIGUSR1, SIGUSR2};
@@ -782,18 +780,8 @@ mod tests {
             register(SIGUSR2, action).unwrap();
             libc::raise(SIGUSR2);
         }
-        for _ in 0..10 {
-            thread::sleep(Duration::from_millis(100));
-            let current = status.load(Ordering::Relaxed);
-            match current {
-                // Not yet
-                0 => continue,
-                // Good, we are done with the correct result
-                _ if current == 1 => return,
-                _ => panic!("Wrong result value {}", current),
-            }
-        }
-        panic!("Timed out waiting for the signal");
+        let current = status.load(Ordering::Relaxed);
+        assert_eq!(current, 1, "Wrong status value");
     }
 
     #[test]
@@ -828,18 +816,8 @@ mod tests {
             register_sigaction(SIGUSR2, action).unwrap();
             libc::raise(SIGUSR2);
         }
-        for _ in 0..10 {
-            thread::sleep(Duration::from_millis(100));
-            let current = status.load(Ordering::Relaxed);
-            match current {
-                // Not yet (PID == 0 doesn't happen)
-                0 => continue,
-                // Good, we are done with the correct result
-                _ if current == pid as usize => return,
-                _ => panic!("Wrong status value {}", current),
-            }
-        }
-        panic!("Timed out waiting for the signal");
+        let current = status.load(Ordering::Relaxed);
+        assert_eq!(current, pid as usize, "Wrong status value");
     }
 
     /// Check that registration works as expected and that unregister tells if it did or not.
