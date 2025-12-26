@@ -148,8 +148,7 @@ impl<E: Exfiltrator> AddSignal for PendingSignals<E> {
     }
 }
 
-/// A struct to control an instance of an associated type
-/// (like for example [`Signals`][super::Signals]).
+/// A struct to control an instance of signal delivery.
 ///
 /// It allows to register more signal handlers and to shutdown the signal
 /// delivery. You can [`clone`][Handle::clone] this type which isn't a

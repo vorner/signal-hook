@@ -81,10 +81,15 @@ jobs:
 
       - name: Check links
         run: |
+          # Prepare "full" build including dependencies for deadlinks
+          cargo doc --all --all-features
           for package in $(cargo metadata --no-deps --format-version=1 | jq -r '.packages[] | .name'); do
-            cargo rustdoc -p "$package" --all-features -- -D warnings
             dname=$(echo "$package" | tr '-' '_')
             cargo deadlinks --dir "target/doc/$dname" --check-http --ignore-fragments
+          done
+          # Try building each separately with enabling warnings as errors
+          for package in $(cargo metadata --no-deps --format-version=1 | jq -r '.packages[] | .name'); do
+            cargo rustdoc -p "$package" --all-features -- -D warnings
           done
 
   ancient-registry:
