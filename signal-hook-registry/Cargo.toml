@@ -13,6 +13,7 @@ repository = "https://github.com/vorner/signal-hook"
 keywords = ["signal", "unix", "daemon"]
 license = "MIT OR Apache-2.0"
 rust-version = "1.26"
+include.workspace = true
 
 [badges]
 travis-ci = { repository = "vorner/signal-hook" }
