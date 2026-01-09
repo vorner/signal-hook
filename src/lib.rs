@@ -411,3 +411,20 @@ pub mod consts {
 }
 
 pub use signal_hook_registry::SigId;
+
+/// Waits for the the process to receive a shutdown signal.
+/// Waits for any of SIGHUP, SIGINT, SIGQUIT, and SIGTERM.
+/// # Errors
+/// Returns `Err` after failing to register the signal handler.
+pub fn wait_for_shutdown_signal() -> Result<(), String> {
+    let signals = [
+        consts::SIGHUP,
+        consts::SIGINT,
+        consts::SIGQUIT,
+        consts::SIGTERM,
+    ];
+    let mut signals = iterator::Signals::new(&signals)
+        .map_err(|e| format!("error setting up handler for signals {signals:?}: {e}"))?;
+    let _ = signals.forever().next();
+    Ok(())
+}

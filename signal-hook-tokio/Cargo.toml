@@ -20,12 +20,14 @@ travis-ci = { repository = "vorner/signal-hook" }
 maintenance = { status = "actively-developed" }
 
 [features]
+convenience = ["futures-v0_3", "futures-util"]
 futures-v0_3 = ["futures-core-0_3"]
 
 [dependencies]
 libc = "~0.2"
 signal-hook = { version = "~0.4", path = ".." }
 futures-core-0_3 = { package = "futures-core", version = "~0.3", optional = true }
+futures-util = { version = "~0.3", features = [], optional = true }
 tokio = { version = "~1", features = ["net"] }
 
 [dev-dependencies]
