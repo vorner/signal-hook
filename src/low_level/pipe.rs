@@ -107,8 +107,18 @@ impl WakeFd {
             if flags == -1 {
                 return Err(Error::last_os_error());
             }
-            let flags = flags | libc::O_NONBLOCK | libc::O_CLOEXEC;
+            let flags = flags | libc::O_NONBLOCK;
             if libc::fcntl(self.fd.as_raw_fd(), libc::F_SETFL, flags) == -1 {
+                return Err(Error::last_os_error());
+            }
+            // Close-on-exec is a file DESCRIPTOR flag, reached through F_SETFD.
+            // F_SETFL above manipulates file STATUS flags and ignores O_CLOEXEC.
+            let fd_flags = libc::fcntl(self.fd.as_raw_fd(), libc::F_GETFD);
+            if fd_flags == -1 {
+                return Err(Error::last_os_error());
+            }
+            let fd_flags = fd_flags | libc::FD_CLOEXEC;
+            if libc::fcntl(self.fd.as_raw_fd(), libc::F_SETFD, fd_flags) == -1 {
                 return Err(Error::last_os_error());
             }
         }
