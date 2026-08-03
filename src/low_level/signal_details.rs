@@ -207,11 +207,12 @@ pub fn emulate_default_handler(signal: c_int) -> Result<(), Error> {
                     unsafe fn prepare_sigset(set: *mut sigset_t, mut signal: c_int) {
                         signal -= 1;
                         let set_raw: *mut libc::c_ulong = set.cast();
-                        let size = mem::size_of::<libc::c_ulong>();
+                        // Words hold bits-per-word signals each, not bytes-per-word.
+                        let bits = 8 * mem::size_of::<libc::c_ulong>();
                         assert_eq!(set_raw as usize % mem::align_of::<libc::c_ulong>(), 0);
-                        let pos = signal as usize / size;
-                        assert!(pos < mem::size_of::<sigset_t>() / size);
-                        let bit = 1 << (signal as usize % size);
+                        let pos = signal as usize / bits;
+                        assert!(pos < mem::size_of::<sigset_t>() / mem::size_of::<libc::c_ulong>());
+                        let bit = 1 << (signal as usize % bits);
                         set_raw.add(pos).write(bit);
                     }
 
