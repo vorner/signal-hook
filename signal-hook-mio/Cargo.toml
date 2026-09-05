@@ -22,8 +22,6 @@ travis-ci = { repository = "vorner/signal-hook" }
 maintenance = { status = "actively-developed" }
 
 [features]
-support-v0_6 = ["mio-0_6", "mio-uds"]
-support-v0_7 = ["mio-0_7"]
 support-v0_8 = ["mio-0_8"]
 support-v1_0 = ["mio-1_0"]
 
@@ -32,12 +30,8 @@ libc = "~0.2"
 signal-hook = { version = "~0.4", path = ".." }
 mio-1_0 = { package = "mio", version = "1.0", features = ["net", "os-ext"], optional = true }
 mio-0_8 = { package = "mio", version = "~0.8", features = ["net", "os-ext"], optional = true }
-mio-0_7 = { package = "mio", version = "~0.7", features = ["os-util", "uds"], optional = true }
-mio-0_6 = { package = "mio", version = "~0.6", optional = true }
-mio-uds = { version = "~0.6", optional = true}
 
 [dev-dependencies]
-mio-0_7 = { package = "mio", version = "~0.7", features = ["os-util", "os-poll", "uds"] }
 serial_test = { path = "../serial_test" }
 
 [package.metadata.docs.rs]
