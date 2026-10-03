@@ -9,6 +9,8 @@ on:
 env:
   CARGO_TERM_COLOR: always
   RUST_BACKTRACE: full
+  # All features except mio 0.6 support, keep in sync with new features
+  FEATURES_NO_MIO_0_6: extended-siginfo,signal-hook-mio/support-v0_7,signal-hook-mio/support-v0_8,signal-hook-mio/support-v1_0,signal-hook-tokio/futures-v0_3
 
 jobs:
   test:
@@ -81,8 +83,8 @@ jobs:
 
       - name: Check links
         run: |
-          # Prepare "full" build including dependencies for deadlinks
-          cargo doc --all --all-features
+          # Full build incl. dependencies for deadlinks, without mio 0.6 (mio versions share the doc dir)
+          cargo doc --all --features="$FEATURES_NO_MIO_0_6"
           for package in $(cargo metadata --no-deps --format-version=1 | jq -r '.packages[] | .name'); do
             dname=$(echo "$package" | tr '-' '_')
             cargo deadlinks --dir "target/doc/$dname" --check-http --ignore-fragments
@@ -156,11 +158,12 @@ jobs:
           - aarch64-linux-android
           - arm-linux-androideabi
           - s390x-unknown-linux-gnu
-          - x86_64-unknown-netbsd
-          - x86_64-unknown-freebsd
         extra-args:
           - "--all --all-features"
         include:
+          # mio 0.6 doesn't build against current libc on the BSDs
+          - { target: x86_64-unknown-netbsd, extra-args: "--all --features=$FEATURES_NO_MIO_0_6" }
+          - { target: x86_64-unknown-freebsd, extra-args: "--all --features=$FEATURES_NO_MIO_0_6" }
           # - wasm32-wasi (not yet? Or not ever?)
           # - x86_64-unknown-redox (Is that platform even usable on stable?)
           - { target: x86_64-unknown-fuchsia, extra-args: "--all-features" }
