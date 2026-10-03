@@ -2,6 +2,8 @@
 
 * `pipe::register_raw` now really sets close-on-exec (`FD_CLOEXEC`) on the file descriptor, for
   both pipes and sockets (#206).
+* Removed the 32-bit Android `sigemptyset`/`sigaddset` fallback, which panicked in
+  `emulate_default_handler` (#207). Android below API 21 is no longer supported.
 
 # 0.4.4
 
