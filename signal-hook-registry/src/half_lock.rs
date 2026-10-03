@@ -32,6 +32,8 @@
 //! enough in practice in case someone wants to get inspired (but do make your own check through
 //! them anyway).
 
+// The `isize::MAX` associated constant needs Rust 1.43, we support 1.26.
+#[allow(deprecated)]
 use std::isize;
 use std::marker::PhantomData;
 use std::ops::Deref;
@@ -42,6 +44,8 @@ use std::thread;
 use libc;
 
 const YIELD_EVERY: usize = 16;
+// The `isize::MAX` associated constant needs Rust 1.43, we support 1.26.
+#[allow(deprecated)]
 const MAX_GUARDS: usize = (isize::MAX) as usize;
 
 pub(crate) struct ReadGuard<'a, T: 'a> {
