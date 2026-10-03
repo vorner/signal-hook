@@ -120,6 +120,7 @@ jobs:
           cd signal-hook-registry
           sed -i -e '/signal-hook =/d' Cargo.toml
           sed -i -e 's/libc = "^0.2"/libc = "=0.2.156"/' Cargo.toml
+          sed -i -e '/^include.workspace/d' Cargo.toml
           sed -i -e 's/errno = ">=0.2, <0.4"/errno = "0.2"/' Cargo.toml
           cargo check
 
