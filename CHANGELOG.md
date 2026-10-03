@@ -1,3 +1,8 @@
+# Unreleased
+
+* `pipe::register_raw` now really sets close-on-exec (`FD_CLOEXEC`) on the file descriptor, for
+  both pipes and sockets (#206).
+
 # 0.4.4
 
 * Documentation about SIGBUS (#204).

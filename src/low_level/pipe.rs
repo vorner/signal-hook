@@ -100,21 +100,6 @@ struct WakeFd {
 }
 
 impl WakeFd {
-    /// Sets close on exec and nonblock on the inner file descriptor.
-    fn set_flags(&self) -> Result<(), Error> {
-        unsafe {
-            let flags = libc::fcntl(self.fd.as_raw_fd(), libc::F_GETFL, 0);
-            if flags == -1 {
-                return Err(Error::last_os_error());
-            }
-            let flags = flags | libc::O_NONBLOCK | libc::O_CLOEXEC;
-            if libc::fcntl(self.fd.as_raw_fd(), libc::F_SETFL, flags) == -1 {
-                return Err(Error::last_os_error());
-            }
-        }
-        Ok(())
-    }
-
     fn wake(&self) {
         wake(self.fd.as_fd(), self.method);
     }
@@ -124,6 +109,20 @@ impl AsFd for WakeFd {
     fn as_fd(&self) -> BorrowedFd<'_> {
         self.fd.as_fd()
     }
+}
+
+/// Reads flags with the `get` command and writes them back with `flag` added using `set`.
+fn add_fcntl_flag(fd: c_int, get: c_int, set: c_int, flag: c_int) -> Result<(), Error> {
+    unsafe {
+        let flags = libc::fcntl(fd, get);
+        if flags == -1 {
+            return Err(Error::last_os_error());
+        }
+        if libc::fcntl(fd, set, flags | flag) == -1 {
+            return Err(Error::last_os_error());
+        }
+    }
+    Ok(())
 }
 
 pub(crate) fn wake(pipe: BorrowedFd<'_>, method: WakeMethod) {
@@ -164,27 +163,24 @@ pub(crate) fn wake(pipe: BorrowedFd<'_>, method: WakeMethod) {
 /// Internally, it *currently* does following. Note that this is *not* part of the stability
 /// guarantees and may change if necessary.
 ///
+/// * The [`FD_CLOEXEC`][libc::FD_CLOEXEC] flag is set on the file descriptor.
 /// * If the file descriptor can be used with [`send`][libc::send], it'll be used together with
 ///   [`MSG_DONTWAIT`][libc::MSG_DONTWAIT]. This is tested by sending `0` bytes of data (depending
 ///   on the socket type, this might wake the read end with an empty message).
 /// * If it is not possible, the [`O_NONBLOCK`][libc::O_NONBLOCK] will be set on the file
 ///   descriptor and [`write`][libc::write] will be used instead.
 pub fn register_raw(signal: c_int, pipe: OwnedFd) -> Result<SigId, Error> {
-    let res = unsafe { libc::send(pipe.as_raw_fd(), &[] as *const _, 0, MSG_NOWAIT) };
-    let fd = match (res, Error::last_os_error().kind()) {
-        (0, _) | (-1, ErrorKind::WouldBlock) => WakeFd {
-            fd: pipe,
-            method: WakeMethod::Send,
-        },
+    let raw = pipe.as_raw_fd();
+    add_fcntl_flag(raw, libc::F_GETFD, libc::F_SETFD, libc::FD_CLOEXEC)?;
+    let res = unsafe { libc::send(raw, &[] as *const _, 0, MSG_NOWAIT) };
+    let method = match (res, Error::last_os_error().kind()) {
+        (0, _) | (-1, ErrorKind::WouldBlock) => WakeMethod::Send,
         _ => {
-            let fd = WakeFd {
-                fd: pipe,
-                method: WakeMethod::Write,
-            };
-            fd.set_flags()?;
-            fd
+            add_fcntl_flag(raw, libc::F_GETFL, libc::F_SETFL, libc::O_NONBLOCK)?;
+            WakeMethod::Write
         }
     };
+    let fd = WakeFd { fd: pipe, method };
     let action = move || fd.wake();
     unsafe { super::register(signal, action) }
 }
@@ -259,6 +255,45 @@ mod tests {
         unsafe { assert_eq!(1, libc::read(fds[0], buff.as_mut_ptr() as *mut _, 1)) }
         assert_eq!(b"X", &buff);
         crate::low_level::unregister(id);
+        Ok(())
+    }
+
+    /// Registers the fd and returns its descriptor and file status flags.
+    fn flags_after_register(fd: c_int) -> Result<(c_int, c_int), Error> {
+        let id = register_raw(libc::SIGUSR1, unsafe { OwnedFd::from_raw_fd(fd) })?;
+        // The fd stays open while the action is registered.
+        let fd_flags = unsafe { libc::fcntl(fd, libc::F_GETFD) };
+        let status_flags = unsafe { libc::fcntl(fd, libc::F_GETFL) };
+        crate::low_level::unregister(id);
+        assert_ne!(-1, fd_flags);
+        assert_ne!(-1, status_flags);
+        Ok((fd_flags, status_flags))
+    }
+
+    #[test]
+    fn pipe_flags() -> Result<(), Error> {
+        let mut fds = [0; 2];
+        unsafe { assert_eq!(0, libc::pipe(fds.as_mut_ptr())) };
+        let _read = unsafe { OwnedFd::from_raw_fd(fds[0]) };
+        let (fd_flags, status_flags) = flags_after_register(fds[1])?;
+        assert_ne!(0, fd_flags & libc::FD_CLOEXEC);
+        assert_ne!(0, status_flags & libc::O_NONBLOCK);
+        Ok(())
+    }
+
+    #[test]
+    fn socket_flags() -> Result<(), Error> {
+        let mut fds = [0; 2];
+        // Not using UnixStream::pair, as that already sets close on exec.
+        unsafe {
+            assert_eq!(
+                0,
+                libc::socketpair(libc::AF_UNIX, libc::SOCK_STREAM, 0, fds.as_mut_ptr())
+            )
+        };
+        let _read = unsafe { OwnedFd::from_raw_fd(fds[0]) };
+        let (fd_flags, _) = flags_after_register(fds[1])?;
+        assert_ne!(0, fd_flags & libc::FD_CLOEXEC);
         Ok(())
     }
 }
