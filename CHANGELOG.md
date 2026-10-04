@@ -1,4 +1,4 @@
-# Unreleased
+# 0.4.5
 
 * `pipe::register_raw` now really sets close-on-exec (`FD_CLOEXEC`) on the file descriptor, for
   both pipes and sockets (#206).
