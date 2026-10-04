@@ -36,7 +36,7 @@ fn setup_for_sigusr2() -> (Signals, Handle) {
 macro_rules! assert_signals {
     ($actual:expr, $($expected:expr),+ $(,)?) => {
         let actual = $actual.collect::<HashSet<libc::c_int>>();
-        let expected = vec!($($expected),+).into_iter().collect::<HashSet<libc::c_int>>();
+        let expected = vec![$($expected),+].into_iter().collect::<HashSet<libc::c_int>>();
         assert_eq!(actual, expected);
     };
 }
