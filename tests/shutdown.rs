@@ -68,6 +68,20 @@ fn cleanup_inside_signal() {
     do_test(hook);
 }
 
+static FLAG: AtomicBool = AtomicBool::new(false);
+
+#[test]
+fn cleanup_inside_signal_static() {
+    fn hook() {
+        // Make sure we have some signal handler, not the default.
+        unsafe { low_level::register(SIGTERM, || ()).unwrap() };
+        flag::register_conditional_shutdown(SIGTERM, 0, &FLAG).unwrap();
+        // But arm at the first SIGTERM
+        flag::register(SIGTERM, &FLAG).unwrap();
+    }
+    do_test(hook);
+}
+
 /// Manually remove the signal handler just after receiving the signal but before going into an
 /// infinite loop.
 #[test]
