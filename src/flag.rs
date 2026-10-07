@@ -137,30 +137,98 @@
 //! }
 //! ```
 
+use std::borrow::Borrow;
 use std::io::Error;
 use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
-use std::sync::Arc;
 
 use libc::{c_int, EINVAL};
 
 use crate::{low_level, SigId};
+
+/// We really want to write something like
+/// ```rust,ignore
+/// fn register<T: 'static + Send + Sync + Borrow<AtomicBool>>(value: T) {
+///     unsafe {
+///         low_level::register(|| {
+///             let flag: &AtomicBool = value.borrow();
+///             // use flag
+///         })
+///     }
+/// }
+/// ```
+///
+/// However, borrow() might not be async-safe.
+/// Therefore we must run it outside the signal handler, capture the return value of borrow() and use it in the signal handler.
+fn wrap_action<T: 'static + Send + Sync + Borrow<U>, U: 'static + Send + Sync>(
+    owner: T,
+    f: impl Fn(&U) + Send + Sync + 'static,
+) -> impl Fn() + 'static + Send + Sync {
+    let owner = Box::into_raw(Box::new(owner));
+    struct ClosureState<T: 'static, U> {
+        // cannot keep this as Box at it violates MIRI's Stack borrow rule
+        owner: *mut T,
+        borrowed: *const U,
+    }
+    unsafe impl<T: 'static + Send + Sync, U: Send + Sync> Send for ClosureState<T, U> {}
+    unsafe impl<T: 'static + Send + Sync, U: Send + Sync> Sync for ClosureState<T, U> {}
+
+    let borrowed = unsafe { &*owner }.borrow() as &U as *const U;
+    let state = ClosureState { owner, borrowed };
+
+    impl<T: 'static, U> Drop for ClosureState<T, U> {
+        fn drop(&mut self) {
+            // SAFETY: self.owner is from Box::into_raw
+            unsafe {
+                drop(Box::from_raw(self.owner));
+            }
+        }
+    }
+
+    move || {
+        // SAFETY: owner is alive and never moved out of state.owner
+        let borrowed = unsafe { &*state.borrowed };
+
+        f(borrowed);
+    }
+}
 
 /// Registers an action to set the flag to `true` whenever the given signal arrives.
 ///
 /// # Panics
 ///
 /// If the signal is one of the forbidden.
-pub fn register(signal: c_int, flag: Arc<AtomicBool>) -> Result<SigId, Error> {
+pub fn register<T: 'static + Send + Sync + Borrow<AtomicBool>>(
+    signal: c_int,
+    flag: T,
+) -> Result<SigId, Error> {
     // We use SeqCst for two reasons:
     // * Signals should not come very often, so the performance does not really matter.
     // * We promise the order of actions, but setting different atomics with Relaxed or similar
     //   would not guarantee the effective order.
-    unsafe { low_level::register(signal, move || flag.store(true, Ordering::SeqCst)) }
+    unsafe {
+        low_level::register(
+            signal,
+            wrap_action(flag, move |flag| {
+                flag.store(true, Ordering::SeqCst);
+            }),
+        )
+    }
 }
 
 /// Registers an action to set the flag to the given value whenever the signal arrives.
-pub fn register_usize(signal: c_int, flag: Arc<AtomicUsize>, value: usize) -> Result<SigId, Error> {
-    unsafe { low_level::register(signal, move || flag.store(value, Ordering::SeqCst)) }
+pub fn register_usize<T: 'static + Send + Sync + Borrow<AtomicUsize>>(
+    signal: c_int,
+    flag: T,
+    value: usize,
+) -> Result<SigId, Error> {
+    unsafe {
+        low_level::register(
+            signal,
+            wrap_action(flag, move |flag| {
+                flag.store(value, Ordering::SeqCst);
+            }),
+        )
+    }
 }
 
 /// Terminate the application on a signal if the given condition is true.
@@ -183,16 +251,16 @@ pub fn register_usize(signal: c_int, flag: Arc<AtomicUsize>, value: usize) -> Re
 /// # Panics
 ///
 /// If the signal is one of the forbidden.
-pub fn register_conditional_shutdown(
+pub fn register_conditional_shutdown<T: 'static + Send + Sync + Borrow<AtomicBool>>(
     signal: c_int,
     status: c_int,
-    condition: Arc<AtomicBool>,
+    condition: T,
 ) -> Result<SigId, Error> {
-    let action = move || {
+    let action = wrap_action(condition, move |condition| {
         if condition.load(Ordering::SeqCst) {
             low_level::exit(status);
         }
-    };
+    });
     unsafe { low_level::register(signal, action) }
 }
 
@@ -214,23 +282,24 @@ pub fn register_conditional_shutdown(
 ///
 /// Additionally to that, any errors that can be caused by a registration of a handler can happen
 /// too.
-pub fn register_conditional_default(
+pub fn register_conditional_default<T: 'static + Send + Sync + Borrow<AtomicBool>>(
     signal: c_int,
-    condition: Arc<AtomicBool>,
+    condition: T,
 ) -> Result<SigId, Error> {
     // Verify we know about this particular signal.
     low_level::signal_name(signal).ok_or_else(|| Error::from_raw_os_error(EINVAL))?;
-    let action = move || {
+    let action = wrap_action(condition, move |condition| {
         if condition.load(Ordering::SeqCst) {
             let _ = low_level::emulate_default_handler(signal);
         }
-    };
+    });
     unsafe { low_level::register(signal, action) }
 }
 
 #[cfg(test)]
 mod tests {
     use std::sync::atomic;
+    use std::sync::Arc;
     use std::time::{Duration, Instant};
 
     use super::*;
@@ -277,6 +346,26 @@ mod tests {
         assert!(!wait_flag(&flag));
         // And the unregistration actually dropped its copy of the Arc
         assert_eq!(1, Arc::strong_count(&flag));
+    }
+
+    #[test]
+    fn miri_wrap_action() {
+        let flag = Arc::new(AtomicBool::new(false));
+        let f = wrap_action(Arc::clone(&flag), |flag: &AtomicBool| {
+            flag.store(true, Ordering::Relaxed)
+        });
+
+        f();
+        assert!(flag.load(Ordering::Relaxed));
+    }
+
+    #[test]
+    fn miri_wrap_action_borrow_in_box() {
+        let f = wrap_action(AtomicBool::new(false), |flag: &AtomicBool| {
+            flag.store(true, Ordering::Relaxed)
+        });
+
+        f();
     }
 
     // The shutdown is tested in tests/shutdown.rs
