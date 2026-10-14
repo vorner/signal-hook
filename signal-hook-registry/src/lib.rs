@@ -180,10 +180,10 @@ impl Slot {
 
         new.sa_sigaction = handler as *const () as usize; // If it doesn't compile on AIX, upgrade the libc dependency
 
-        #[cfg(target_os = "nto")]
+        #[cfg(any(target_os = "nto", target_os = "qnx"))]
         let flags = 0;
         // SA_RESTART is not supported by qnx https://www.qnx.com/support/knowledgebase.html?id=50130000000SmiD
-        #[cfg(not(target_os = "nto"))]
+        #[cfg(not(any(target_os = "nto", target_os = "qnx")))]
         let flags = libc::SA_RESTART;
         // Android is broken and uses different int types than the rest (and different depending on
         // the pointer width). This converts the flags to the proper type no matter what it is on
