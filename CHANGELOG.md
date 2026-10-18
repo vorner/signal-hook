@@ -1,3 +1,7 @@
+# Unreleased
+
+* Expose the optional child exit status or signal in `low_level::siginfo::Process`.
+
 # 0.4.5
 
 * `pipe::register_raw` now really sets close-on-exec (`FD_CLOEXEC`) on the file descriptor, for
