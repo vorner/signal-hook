@@ -145,22 +145,59 @@ use libc::{c_int, EINVAL};
 
 use crate::{low_level, SigId};
 
+/// Similar to [`std::borrow::Borrow`], but implementer must ensure that `borrow_signal_safe`
+/// is signal safe. See [`crate::low_level::register`].
+///
+/// # Safety
+/// `borrow_signal_safe` must be signal safe.
+pub unsafe trait BorrowSignalSafe<Borrowed> {
+    /// Immutably borrows from an owned value.
+    fn borrow_signal_safe(&self) -> &Borrowed;
+}
+
+unsafe impl<T> BorrowSignalSafe<T> for Arc<T> {
+    fn borrow_signal_safe(&self) -> &T {
+        self
+    }
+}
+
+unsafe impl<T> BorrowSignalSafe<T> for &'static T {
+    fn borrow_signal_safe(&self) -> &T {
+        self
+    }
+}
+
 /// Registers an action to set the flag to `true` whenever the given signal arrives.
 ///
 /// # Panics
 ///
 /// If the signal is one of the forbidden.
-pub fn register(signal: c_int, flag: Arc<AtomicBool>) -> Result<SigId, Error> {
+pub fn register<T: 'static + Send + Sync + BorrowSignalSafe<AtomicBool>>(
+    signal: c_int,
+    flag: T,
+) -> Result<SigId, Error> {
     // We use SeqCst for two reasons:
     // * Signals should not come very often, so the performance does not really matter.
     // * We promise the order of actions, but setting different atomics with Relaxed or similar
     //   would not guarantee the effective order.
-    unsafe { low_level::register(signal, move || flag.store(true, Ordering::SeqCst)) }
+    unsafe {
+        low_level::register(signal, move || {
+            flag.borrow_signal_safe().store(true, Ordering::SeqCst)
+        })
+    }
 }
 
 /// Registers an action to set the flag to the given value whenever the signal arrives.
-pub fn register_usize(signal: c_int, flag: Arc<AtomicUsize>, value: usize) -> Result<SigId, Error> {
-    unsafe { low_level::register(signal, move || flag.store(value, Ordering::SeqCst)) }
+pub fn register_usize<T: 'static + Send + Sync + BorrowSignalSafe<AtomicUsize>>(
+    signal: c_int,
+    flag: T,
+    value: usize,
+) -> Result<SigId, Error> {
+    unsafe {
+        low_level::register(signal, move || {
+            flag.borrow_signal_safe().store(value, Ordering::SeqCst)
+        })
+    }
 }
 
 /// Terminate the application on a signal if the given condition is true.
@@ -183,13 +220,13 @@ pub fn register_usize(signal: c_int, flag: Arc<AtomicUsize>, value: usize) -> Re
 /// # Panics
 ///
 /// If the signal is one of the forbidden.
-pub fn register_conditional_shutdown(
+pub fn register_conditional_shutdown<T: 'static + Send + Sync + BorrowSignalSafe<AtomicBool>>(
     signal: c_int,
     status: c_int,
-    condition: Arc<AtomicBool>,
+    condition: T,
 ) -> Result<SigId, Error> {
     let action = move || {
-        if condition.load(Ordering::SeqCst) {
+        if condition.borrow_signal_safe().load(Ordering::SeqCst) {
             low_level::exit(status);
         }
     };
@@ -214,14 +251,14 @@ pub fn register_conditional_shutdown(
 ///
 /// Additionally to that, any errors that can be caused by a registration of a handler can happen
 /// too.
-pub fn register_conditional_default(
+pub fn register_conditional_default<T: 'static + Send + Sync + BorrowSignalSafe<AtomicBool>>(
     signal: c_int,
-    condition: Arc<AtomicBool>,
+    condition: T,
 ) -> Result<SigId, Error> {
     // Verify we know about this particular signal.
     low_level::signal_name(signal).ok_or_else(|| Error::from_raw_os_error(EINVAL))?;
     let action = move || {
-        if condition.load(Ordering::SeqCst) {
+        if condition.borrow_signal_safe().load(Ordering::SeqCst) {
             let _ = low_level::emulate_default_handler(signal);
         }
     };
@@ -277,6 +314,23 @@ mod tests {
         assert!(!wait_flag(&flag));
         // And the unregistration actually dropped its copy of the Arc
         assert_eq!(1, Arc::strong_count(&flag));
+    }
+
+    #[test]
+    fn register_unregister_static() {
+        static FLAG: AtomicBool = AtomicBool::new(false);
+        // When we register the action, it is active.
+        #[cfg(not(windows))]
+        let signal = register(SIGUSR1, &FLAG).unwrap();
+        #[cfg(windows)]
+        let signal = register(SIGTERM, &FLAG).unwrap();
+        self_signal();
+        assert!(wait_flag(&FLAG));
+        // But stops working after it is unregistered.
+        assert!(crate::low_level::unregister(signal));
+        FLAG.store(false, Ordering::Relaxed);
+        self_signal();
+        assert!(!wait_flag(&FLAG));
     }
 
     // The shutdown is tested in tests/shutdown.rs
