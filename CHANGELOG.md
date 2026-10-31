@@ -1,3 +1,7 @@
+# 0.4.6
+
+* Allow registering `'static` flags in addition to Arc ones (#215, #180).
+
 # 0.4.5
 
 * `pipe::register_raw` now really sets close-on-exec (`FD_CLOEXEC`) on the file descriptor, for
