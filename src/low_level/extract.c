@@ -55,3 +55,7 @@ pid_t sighook_signal_pid(const siginfo_t *info) {
 uid_t sighook_signal_uid(const siginfo_t *info) {
     return info->si_uid;
 }
+
+int sighook_signal_status(const siginfo_t *info) {
+    return info->si_status;
+}

@@ -13,6 +13,7 @@ extern "C" {
     fn sighook_signal_cause(info: &siginfo_t) -> ICause;
     fn sighook_signal_pid(info: &siginfo_t) -> pid_t;
     fn sighook_signal_uid(info: &siginfo_t) -> uid_t;
+    fn sighook_signal_status(info: &siginfo_t) -> c_int;
 }
 
 // Warning: must be in sync with the C code
@@ -66,6 +67,13 @@ pub struct Process {
 
     /// The user owning the process.
     pub uid: uid_t,
+
+    /// The exit status or signal of a child process.
+    ///
+    /// For [`Chld::Exited`], this contains the child's exit code. For the other
+    /// [`Cause::Chld`] variants, it contains the signal involved in the state change.
+    /// This is `None` when the signal does not describe a known child state change.
+    pub status: Option<c_int>,
 }
 
 impl Process {
@@ -75,12 +83,21 @@ impl Process {
      * # Safety
      *
      * The `info` must have a `si_code` corresponding to some situation that has the `si_pid`
-     * and `si_uid` filled in.
+     * and `si_uid` filled in. The `cause` must have been extracted from `info`.
      */
-    unsafe fn extract(info: &siginfo_t) -> Self {
+    unsafe fn extract(info: &siginfo_t, cause: ICause) -> Self {
         Self {
             pid: sighook_signal_pid(info),
             uid: sighook_signal_uid(info),
+            status: match cause {
+                ICause::Exited
+                | ICause::Killed
+                | ICause::Dumped
+                | ICause::Trapped
+                | ICause::Stopped
+                | ICause::Continued => Some(sighook_signal_status(info)),
+                _ => None,
+            },
         }
     }
 }
@@ -240,7 +257,7 @@ impl Origin {
     pub unsafe fn extract(info: &siginfo_t) -> Self {
         let cause = sighook_signal_cause(info);
         let process = if cause.has_process() {
-            let process = Process::extract(info);
+            let process = Process::extract(info, cause);
             // On macos we don't have the si_code to go by, but we can go by the values being
             // empty there.
             if cfg!(target_os = "macos") && process.pid == 0 && process.uid == 0 {
