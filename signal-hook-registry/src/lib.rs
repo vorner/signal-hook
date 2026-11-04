@@ -85,9 +85,9 @@ use libc::{c_int, c_void, sigaction, siginfo_t};
 use libc::{c_int, sighandler_t};
 
 #[cfg(not(windows))]
-use libc::{SIGFPE, SIGILL, SIGKILL, SIGSEGV, SIGSTOP};
+use libc::{SIGBUS, SIGFPE, SIGILL, SIGKILL, SIGSEGV, SIGSTOP};
 #[cfg(windows)]
-use libc::{SIGFPE, SIGILL, SIGSEGV};
+use libc::{SIGBUS, SIGFPE, SIGILL, SIGSEGV};
 
 use half_lock::HalfLock;
 use vec_map::VecMap;
@@ -451,9 +451,9 @@ impl Drop for ErrnoGuard {
 pub const FORBIDDEN: &[c_int] = FORBIDDEN_IMPL;
 
 #[cfg(windows)]
-const FORBIDDEN_IMPL: &[c_int] = &[SIGILL, SIGFPE, SIGSEGV];
+const FORBIDDEN_IMPL: &[c_int] = &[SIGILL, SIGFPE, SIGSEGV, SIGBUS];
 #[cfg(not(windows))]
-const FORBIDDEN_IMPL: &[c_int] = &[SIGKILL, SIGSTOP, SIGILL, SIGFPE, SIGSEGV];
+const FORBIDDEN_IMPL: &[c_int] = &[SIGKILL, SIGSTOP, SIGILL, SIGFPE, SIGSEGV, SIGBUS];
 
 /// Registers an arbitrary action for the given signal.
 ///
@@ -476,6 +476,7 @@ const FORBIDDEN_IMPL: &[c_int] = &[SIGKILL, SIGSTOP, SIGILL, SIGFPE, SIGSEGV];
 /// * `SIGILL`
 /// * `SIGFPE`
 /// * `SIGSEGV`
+/// * `SIGBUS`
 ///
 /// The first two are not possible to override (and the underlying C functions simply ignore all
 /// requests to do so, which smells of possible bugs, or return errors). The rest can be set, but
