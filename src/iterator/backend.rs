@@ -21,7 +21,7 @@ use std::borrow::{Borrow, BorrowMut};
 use std::fmt::{Debug, Formatter, Result as FmtResult};
 use std::io::Error;
 use std::mem::MaybeUninit;
-use std::os::fd::{AsFd, OwnedFd};
+use std::os::fd::OwnedFd;
 use std::os::unix::io::AsRawFd;
 use std::ptr;
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -30,7 +30,7 @@ use std::sync::{Arc, Mutex};
 use libc::{self, c_int};
 
 use super::exfiltrator::Exfiltrator;
-use crate::low_level::pipe::{self, WakeMethod};
+use crate::low_level::pipe::WakeFd;
 use crate::SigId;
 
 /// Maximal signal number we support.
@@ -40,9 +40,9 @@ trait SelfPipeWrite: Debug + Send + Sync {
     fn wake_readers(&self);
 }
 
-impl<W: AsFd + Debug + Send + Sync> SelfPipeWrite for W {
+impl SelfPipeWrite for WakeFd {
     fn wake_readers(&self) {
-        pipe::wake(self.as_fd(), WakeMethod::Send);
+        self.wake();
     }
 }
 
@@ -254,12 +254,14 @@ where
     ///
     /// # Requirements for the pipe type
     ///
-    /// * Must support [`send`](https://man7.org/linux/man-pages/man2/send.2.html) for
+    /// * Must support [`send`](https://man7.org/linux/man-pages/man2/send.2.html) or
+    ///   nonblocking [`write`](https://man7.org/linux/man-pages/man2/write.2.html) for
     ///   asynchronously writing bytes to the write end
     /// * Must support [`recv`](https://man7.org/linux/man-pages/man2/recv.2.html) for
     ///   reading bytes from the read end
     ///
-    /// So UnixStream is a good choice for this.
+    /// So UnixStream is a good choice for this. If `send` is unavailable, the
+    /// write end is configured with `O_NONBLOCK` before any handlers are installed.
     pub fn with_pipe<I, S, W>(read: R, write: W, exfiltrator: E, signals: I) -> Result<Self, Error>
     where
         I: IntoIterator<Item = S>,
@@ -268,7 +270,7 @@ where
     {
         let pending = Arc::new(PendingSignals::new(exfiltrator));
         let pending_add_signal = Arc::clone(&pending);
-        let handle = Handle::new(write.into(), pending_add_signal);
+        let handle = Handle::new(WakeFd::new(write.into())?, pending_add_signal);
         let me = Self {
             read,
             handle,

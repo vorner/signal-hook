@@ -88,19 +88,34 @@ const MSG_NOWAIT: i32 = libc::MSG_NONBLOCK;
 #[cfg(not(target_os = "aix"))]
 const MSG_NOWAIT: i32 = libc::MSG_DONTWAIT;
 
-#[derive(Copy, Clone)]
+#[derive(Copy, Clone, Debug)]
 pub(crate) enum WakeMethod {
     Send,
     Write,
 }
 
-struct WakeFd {
+#[derive(Debug)]
+pub(crate) struct WakeFd {
     fd: OwnedFd,
     method: WakeMethod,
 }
 
 impl WakeFd {
-    fn wake(&self) {
+    pub(crate) fn new(fd: OwnedFd) -> Result<Self, Error> {
+        let raw = fd.as_raw_fd();
+        add_fcntl_flag(raw, libc::F_GETFD, libc::F_SETFD, libc::FD_CLOEXEC)?;
+        let res = unsafe { libc::send(raw, &[] as *const _, 0, MSG_NOWAIT) };
+        let method = match (res, Error::last_os_error().kind()) {
+            (0, _) | (-1, ErrorKind::WouldBlock) => WakeMethod::Send,
+            _ => {
+                add_fcntl_flag(raw, libc::F_GETFL, libc::F_SETFL, libc::O_NONBLOCK)?;
+                WakeMethod::Write
+            }
+        };
+        Ok(Self { fd, method })
+    }
+
+    pub(crate) fn wake(&self) {
         wake(self.fd.as_fd(), self.method);
     }
 }
@@ -170,17 +185,7 @@ pub(crate) fn wake(pipe: BorrowedFd<'_>, method: WakeMethod) {
 /// * If it is not possible, the [`O_NONBLOCK`][libc::O_NONBLOCK] will be set on the file
 ///   descriptor and [`write`][libc::write] will be used instead.
 pub fn register_raw(signal: c_int, pipe: OwnedFd) -> Result<SigId, Error> {
-    let raw = pipe.as_raw_fd();
-    add_fcntl_flag(raw, libc::F_GETFD, libc::F_SETFD, libc::FD_CLOEXEC)?;
-    let res = unsafe { libc::send(raw, &[] as *const _, 0, MSG_NOWAIT) };
-    let method = match (res, Error::last_os_error().kind()) {
-        (0, _) | (-1, ErrorKind::WouldBlock) => WakeMethod::Send,
-        _ => {
-            add_fcntl_flag(raw, libc::F_GETFL, libc::F_SETFL, libc::O_NONBLOCK)?;
-            WakeMethod::Write
-        }
-    };
-    let fd = WakeFd { fd: pipe, method };
+    let fd = WakeFd::new(pipe)?;
     let action = move || fd.wake();
     unsafe { super::register(signal, action) }
 }
