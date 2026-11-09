@@ -1,5 +1,8 @@
 # 0.4.6
 
+* Fall back to nonblocking writes for iterator wake-ups when socket sends are denied,
+  preventing lost signal notifications and hangs during shutdown in restricted sandboxes.
+
 * Allow registering `'static` flags in addition to Arc ones (#215, #180).
 
 # 0.4.5
